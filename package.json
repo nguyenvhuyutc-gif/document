@@ -1,0 +1,23 @@
+{
+  "name": "bang-theo-doi-hang-muc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bảng theo dõi hạng mục (WBS) — máy chủ tĩnh + lưu dữ liệu chung vào data.json. Không cần cài thêm gói, chỉ dùng Node.js built-in.",
+  "main": "serve.cjs",
+  "scripts": {
+    "start": "node serve.cjs",
+    "dev": "node serve.cjs",
+    "serve": "node serve.cjs",
+    "vercel-build": "echo 'No build required'",
+    "deploy": "npx vercel@latest --prod"
+  },
+  "dependencies": {
+    "mongodb": "^5.8.0"
+  },
+  "devDependencies": {
+    "vercel": "^55.0.0"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

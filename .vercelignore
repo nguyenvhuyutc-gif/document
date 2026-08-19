@@ -1,0 +1,16 @@
+# Bí mật — đặt biến môi trường trong Vercel Dashboard, KHÔNG đẩy file .env lên
+.env
+.env.*
+!.env.example
+
+# Chỉ dùng khi chạy local (máy chủ LAN) — Vercel dùng MongoDB thay thế
+serve.cjs
+start-server.bat
+data.json
+
+# Rác
+node_modules
+.DS_Store
+npm-debug.log*
+.claude
+data-files

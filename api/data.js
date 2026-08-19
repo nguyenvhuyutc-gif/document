@@ -1,0 +1,130 @@
+// ============================================================
+//  API dữ liệu — NHIỀU KẾ HOẠCH, mỗi kế hoạch = 1 document MongoDB
+//    GET  /api/data?list=1                 -> { ok, plans: [{id,name,mtime}] }
+//    GET  /api/data?plan=<id>              -> { ok, mtime, data, name }
+//    POST /api/data?plan=<id>   (body=data)-> lưu, trả { ok, mtime }
+//    POST /api/data?action=create&name=…   -> { ok, plan: {id,name,mtime} }
+//    POST /api/data?action=rename&plan=&name=…
+//    POST /api/data?action=delete&plan=
+//  Tương thích ngược: doc cũ _id="data" hiện ra như một kế hoạch tên "Kế hoạch 1".
+// ============================================================
+const { MongoClient } = require("mongodb");
+const crypto = require("crypto");
+
+const uri = process.env.MONGODB_URI;
+const dbName = process.env.MONGODB_DB || "bim";
+const collectionName = process.env.MONGODB_COLLECTION || "bim_app";
+
+function sendJson(res, code, obj) {
+  res.status(code).json(obj);
+}
+
+async function connectMongo() {
+  if (!uri) throw new Error("MONGODB_URI is not configured");
+  if (global.__mongoClient && global.__mongoDb) {
+    return { client: global.__mongoClient, db: global.__mongoDb };
+  }
+  const client = new MongoClient(uri);
+  await client.connect();
+  const db = client.db(dbName);
+  global.__mongoClient = client;
+  global.__mongoDb = db;
+  return { client, db };
+}
+
+async function readBody(req) {
+  if (req.body != null && typeof req.body === "object" && !Buffer.isBuffer(req.body)) return req.body;
+  let raw = req.body;
+  if (raw == null) {
+    raw = await new Promise((resolve, reject) => {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => resolve(body));
+      req.on("error", reject);
+    });
+  }
+  if (Buffer.isBuffer(raw)) raw = raw.toString("utf8");
+  return JSON.parse(raw);
+}
+
+module.exports = async (req, res) => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+  try {
+    const url = new URL(req.url, "http://localhost");
+    const q = url.searchParams;
+    const { db } = await connectMongo();
+    const collection = db.collection(collectionName);
+
+    // ---- danh sách kế hoạch ----
+    if (req.method === "GET" && q.get("list")) {
+      const docs = await collection.find({}, { projection: { name: 1, updatedAt: 1, createdAt: 1 } }).toArray();
+      const plans = docs.map((d) => ({
+        id: d._id,
+        name: d.name || "Kế hoạch 1",
+        mtime: d.updatedAt || 0,
+        createdAt: d.createdAt || 0,
+      }));
+      plans.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      return sendJson(res, 200, { ok: true, plans });
+    }
+
+    const action = q.get("action");
+
+    // ---- tạo kế hoạch ----
+    if (req.method === "POST" && action === "create") {
+      const name = (q.get("name") || "Kế hoạch mới").trim().slice(0, 120) || "Kế hoạch mới";
+      const id = "p" + crypto.randomBytes(8).toString("hex");
+      const now = Date.now();
+      await collection.insertOne({ _id: id, name, data: null, createdAt: now, updatedAt: now });
+      return sendJson(res, 200, { ok: true, plan: { id, name, mtime: now } });
+    }
+
+    // ---- đổi tên ----
+    if (req.method === "POST" && action === "rename") {
+      const id = q.get("plan");
+      const name = (q.get("name") || "").trim().slice(0, 120);
+      if (!id || !name) return sendJson(res, 400, { ok: false, error: "Thiếu plan hoặc name" });
+      await collection.updateOne({ _id: id }, { $set: { name } });
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // ---- xoá ----
+    if ((req.method === "POST" && action === "delete") || (req.method === "DELETE" && q.get("plan"))) {
+      const id = q.get("plan");
+      if (!id) return sendJson(res, 400, { ok: false, error: "Thiếu plan" });
+      await collection.deleteOne({ _id: id });
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // ---- đọc / ghi dữ liệu một kế hoạch (mặc định: doc cũ "data") ----
+    const planId = q.get("plan") || "data";
+
+    if (req.method === "GET") {
+      const doc = await collection.findOne({ _id: planId });
+      if (!doc) return sendJson(res, 200, { ok: true, mtime: 0, data: null, name: null });
+      return sendJson(res, 200, { ok: true, mtime: doc.updatedAt || 0, data: doc.data || null, name: doc.name || null });
+    }
+
+    if (req.method === "POST") {
+      let payload;
+      try { payload = await readBody(req); }
+      catch (e) { return sendJson(res, 400, { ok: false, error: "JSON không hợp lệ" }); }
+      if (typeof payload !== "object" || payload === null) {
+        return sendJson(res, 400, { ok: false, error: "Dữ liệu phải là JSON" });
+      }
+      const updatedAt = Date.now();
+      await collection.updateOne(
+        { _id: planId },
+        { $set: { data: payload, updatedAt }, $setOnInsert: { name: "Kế hoạch 1", createdAt: updatedAt } },
+        { upsert: true }
+      );
+      return sendJson(res, 200, { ok: true, mtime: updatedAt });
+    }
+
+    sendJson(res, 405, { ok: false, error: "Method Not Allowed" });
+  } catch (error) {
+    console.error(error);
+    sendJson(res, 500, { ok: false, error: String(error) });
+  }
+};

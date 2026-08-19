@@ -9,7 +9,12 @@
     "dev": "node serve.cjs",
     "serve": "node serve.cjs",
     "vercel-build": "echo 'No build required'",
-    "deploy": "npx vercel@latest --prod"
+    "deploy": "vercel deploy --prod",
+    "deploy:preview": "vercel deploy",
+    "vercel:login": "vercel login",
+    "vercel:link": "vercel link --yes",
+    "vercel:env": "vercel env pull .env",
+    "vercel:logs": "vercel logs"
   },
   "dependencies": {
     "mongodb": "^5.8.0"

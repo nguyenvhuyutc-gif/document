@@ -133,8 +133,13 @@ module.exports = async (req, res) => {
     // retryUp đã thử lại 3 lần mỗi mảnh, tức là treo ô nhiều phút.
     // Đặt TRƯỚC cả bước kiểm quyền: người dùng cần biết "hãy tải lại trang",
     // không phải "sai mật khẩu".
-    if (action === "chunk" || action === "finish" ||
-        (req.method === "DELETE" && url.searchParams.get("chunks"))) {
+    //
+    // Bắt theo kiểu "mọi POST KHÔNG phải sign-upload/confirm" chứ không liệt kê
+    // action cũ: bản cũ tải file nhỏ (≤3.5MB) bằng POST ?name=&type= KHÔNG có
+    // action nào cả — đó là đường tải lên phổ biến nhất, và liệt kê theo tên sẽ
+    // bỏ sót đúng nó.
+    const postLaCu = req.method === "POST" && action !== "sign-upload" && action !== "confirm";
+    if (postLaCu || (req.method === "DELETE" && url.searchParams.get("chunks"))) {
       res.status(426).json({ ok: false, error: "Bản web đã cập nhật — hãy tải lại trang (Ctrl+F5)" });
       return;
     }
@@ -172,12 +177,18 @@ module.exports = async (req, res) => {
 
       const key = makeKey(name);
       const newId = crypto.randomBytes(12).toString("hex");
-      // Ghi doc `pending` NGAY TẠI ĐÂY để ràng id ↔ key ↔ người ký một cách nguyên tử.
-      // Nhờ đó confirm không thể ghi metadata trỏ vào key của người khác (key KHÔNG
-      // phải bí mật — nó nằm trong path của mọi URL đã ký), confirm gọi lại lần hai
-      // không vỡ, và script dọn có danh sách pending có thẩm quyền thay vì đoán theo tuổi.
-      await col.insertOne({ _id: newId, name, type, key, status: "pending", createdAt: Date.now() });
+      // KÝ TRƯỚC, ghi doc SAU. Ký là tính toán cục bộ, không gọi mạng, nhưng nó
+      // ném lỗi khi 4 biến R2 thiếu hoặc rỗng. Ghi doc trước thì mỗi lần thử sẽ
+      // để lại một doc `pending` mồ côi — và retryUp ở client thử 3 lần, còn script
+      // dọn thì CỐ Ý không bao giờ đụng tới doc pending. Ký trước thì lỗi xảy ra
+      // khi chưa có gì được ghi và chưa ai nhận được URL nào.
       const uploadUrl = await signR2(key, "PUT", 900);       // 15 phút
+      // Ghi doc `pending` để ràng id ↔ key ↔ người ký một cách nguyên tử, TRƯỚC khi
+      // trả URL ra ngoài. Nhờ đó confirm không thể ghi metadata trỏ vào key của
+      // người khác (key KHÔNG phải bí mật — nó nằm trong path của mọi URL đã ký),
+      // confirm gọi lại lần hai không vỡ, và script dọn có danh sách pending có
+      // thẩm quyền thay vì đoán theo tuổi file.
+      await col.insertOne({ _id: newId, name, type, key, status: "pending", createdAt: Date.now() });
       res.status(200).json({ ok: true, id: newId, key, uploadUrl });
       return;
     }
@@ -246,7 +257,7 @@ module.exports = async (req, res) => {
         return;
       }
       if (size > MAX_UPLOAD) {
-        try { await fetch(await signR2(key, "DELETE", 300), { method: "DELETE" }); }
+        try { await fetch(await signR2(key, "DELETE", 300), { method: "DELETE", signal: AbortSignal.timeout(5000) }); }
         catch (e) { console.error("confirm: khong xoa duoc object qua lon", e); }
         await col.deleteOne({ _id: id, status: "pending" });
         res.status(413).json({ ok: false, error: "File quá lớn (giới hạn 200MB)" });
@@ -367,7 +378,7 @@ module.exports = async (req, res) => {
       if (doc.key) {
         // Xoá object hỏng thì VẪN xoá metadata và trả ok — metadata trỏ vào hư không
         // tệ hơn một file mồ côi. Ghi log để còn dấu vết cho script dọn.
-        try { await fetch(await signR2(doc.key, "DELETE", 300), { method: "DELETE" }); }
+        try { await fetch(await signR2(doc.key, "DELETE", 300), { method: "DELETE", signal: AbortSignal.timeout(5000) }); }
         catch (e) { console.error("DELETE: khong xoa duoc object R2 " + doc.key, e); }
       }
       if (Array.isArray(doc.chunks) && doc.chunks.length) {

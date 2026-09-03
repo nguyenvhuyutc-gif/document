@@ -993,6 +993,7 @@
   var filesBusy = false;      // đang gắn file vừa tải xong vào dòng → tạm dừng đồng bộ
   var syncPaused = false;     // dải cảnh báo xung đột đang hiện → dừng hẳn đồng bộ
   var conflictData = null;    // bản trên máy chủ mà máy chủ trả kèm mã 409
+  var pushing = false;        // đang có một lần đẩy lên máy chủ chạy dở
 
   // ---- phân quyền (server mới là nơi chặn thật — đây chỉ là giao diện) ----
   // authProtected = máy chủ có đặt EDIT_KEY/ADMIN_KEY; role = quyền của mật khẩu đang lưu
@@ -1126,6 +1127,12 @@
   }
   function pushToServer() {
     if (!state.planId) { savePending = false; return; }
+    // Chỉ cho MỘT lần đẩy chạy tại một thời điểm. Không có khoá này thì người dùng
+    // gõ liên tục trên mạng chậm sẽ gửi lần thứ hai kèm serverMtime CŨ (lần đầu
+    // chưa trả về), máy chủ thấy lệch và trả 409 với chính thay đổi của họ — dải
+    // cảnh báo xung đột giả, và bấm gì cũng mất một phần sửa.
+    if (pushing) { save(); return; }        // hẹn lại 250ms, lúc đó đã có mtime mới
+    pushing = true;
     var payload = JSON.stringify({ rows: state.rows, people: state.people, statuses: state.statuses });
     // ifMtime = bản mà mình đã đọc. Máy chủ chỉ ghi khi document vẫn còn đúng bản đó;
     // khác đi thì trả 409 kèm bản mới thay vì lặng lẽ ghi đè sửa của người khác.
@@ -1133,6 +1140,7 @@
       { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: payload })
       .then(function (r) { return r.json(); })
       .then(function (j) {
+        pushing = false;
         // 409 = có người khác đã lưu trong lúc mình đang sửa. Đây là lúc DUY NHẤT
         // người dùng có đủ thông tin để quyết định, nên phải hỏi chứ không tự xử.
         // Không gộp tự động: dữ liệu là mảng dòng có thứ tự và người dùng sửa được
@@ -1141,13 +1149,34 @@
         if (j && j.ok) { serverMtime = j.mtime || serverMtime; savePending = false; setMode("server"); }
         else if (j && j.needKey) { savePending = false; role = "view"; applyRole(); toast("Không có quyền sửa — đăng nhập rồi thử lại"); }
       })
-      .catch(function () { savePending = false; setMode("server-err"); toast("Mất kết nối máy chủ — sẽ tự lưu lại khi có mạng"); });
+      .catch(function () { pushing = false; savePending = false; setMode("server-err"); toast("Mất kết nối máy chủ — sẽ tự lưu lại khi có mạng"); });
   }
 
   // ---- dải cảnh báo xung đột ----
   function showConflictBanner(j) {
     savePending = false;
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+
+    // Người dùng đã bấm quay lại danh sách trong lúc chờ trả lời (nút đó đẩy nốt
+    // thay đổi rồi gọi showPlanScreen, vốn đặt planId = null). Dải cảnh báo sẽ
+    // hiện đè lên màn hình danh sách, mà hai nút của nó không còn kế hoạch nào để
+    // thao tác — "Ghi đè" sẽ im lặng không làm gì nhưng vẫn báo thành công.
+    if (!state.planId) {
+      toast("Thay đổi cuối chưa lưu được — có người khác vừa sửa kế hoạch này");
+      return;
+    }
+
+    // Kế hoạch đã bị xoá (máy chủ trả mtime 0 và data null). Cả hai lựa chọn đều
+    // sai: không có bản nào để "xem", còn "ghi đè" sẽ dùng ifMtime = 0 rơi vào
+    // nhánh upsert và LÀM SỐNG LẠI kế hoạch đã xoá với tên mặc định "Kế hoạch 1".
+    // Chỉ báo rõ rồi dừng lưu; dừng đồng bộ để nội dung đang sửa còn trên màn hình
+    // cho người dùng kịp sao chép ra.
+    if (!j.mtime && !j.data) {
+      syncPaused = true;
+      toast("Kế hoạch này đã bị xoá — thay đổi của bạn không lưu được nữa");
+      return;
+    }
+
     syncPaused = true;                 // dừng đồng bộ để bản đang sửa không bị nuốt
     conflictData = j;
     var bar = document.getElementById("conflictBar");

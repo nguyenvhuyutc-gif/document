@@ -1404,7 +1404,7 @@
   }
 
   // ================= File đính kèm =================
-  // File tải thẳng lên Cloudflare R2 nên không còn vướng giới hạn body ~4.5MB của
+  // File tải thẳng lên Amazon S3 nên không còn vướng giới hạn body ~4.5MB của
   // Vercel lẫn giới hạn 16MB/document của MongoDB — không cần cắt mảnh nữa.
   var MAX_UPLOAD = 200 * 1024 * 1024;  // giới hạn 1 file khi lưu lên máy chủ
   function fmtSize(n) {
@@ -1645,7 +1645,7 @@
     var ascii = nm.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
     return 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(nm);
   }
-  // Tải 1 file lên R2: xin URL ký → PUT thẳng lên kho → báo máy chủ ghi metadata.
+  // Tải 1 file lên S3: xin URL ký → PUT thẳng lên kho → báo máy chủ ghi metadata.
   // Dùng XMLHttpRequest chứ không dùng fetch vì fetch không báo được tiến độ tải LÊN.
   function uploadDirect(proc, onProgress) {
     return retryUp(function () {
@@ -1659,7 +1659,7 @@
       return new Promise(function (resolve, reject) {
         var xhr = new XMLHttpRequest();
         xhr.open("PUT", s.uploadUrl, true);
-        // BẮT BUỘC: R2 lưu hai header này làm metadata của object, và đó là NGUỒN DUY
+        // BẮT BUỘC: S3 lưu hai header này làm metadata của object, và đó là NGUỒN DUY
         // NHẤT của tên file lúc tải xuống — thuộc tính download của thẻ <a> bị trình
         // duyệt bỏ qua sau khi 302 sang khác origin. Bỏ hai dòng này thì file lưu ra
         // tên key ngẫu nhiên (a1b2c3d4e5f6.dwg) và KHÔNG có đường sửa ở phía client.
@@ -1738,7 +1738,7 @@
     function attach(j) {
       if (!j || !j.ok || !j.file) { toast((j && j.error) || "Tải lên thất bại"); return; }
       // filesBusy CHỈ bật ở đây — từ lúc file đã nằm trên kho cho tới sau save().
-      // KHÔNG bật trước khi PUT: PUT đi thẳng sang R2, không đụng máy chủ của mình,
+      // KHÔNG bật trước khi PUT: PUT đi thẳng sang S3, không đụng máy chủ của mình,
       // nên không có lý do gì dừng đồng bộ. Bật sớm thì với 200MB × 3 file state.rows
       // đứng yên hàng chục phút, rồi save() đẩy nguyên document lên và xoá sạch mọi
       // sửa của người khác trong khoảng đó — im lặng, sau một thông báo xanh.

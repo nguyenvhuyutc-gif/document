@@ -1,7 +1,7 @@
 # Dự án: Bảng theo dõi hạng mục (BIM)
 
 Ứng dụng HTML tĩnh + serverless functions, chạy trên Vercel. Dữ liệu bảng ở
-MongoDB Atlas; **file đính kèm ở Cloudflare R2** (từ 09/2026, tối đa 200MB/file).
+MongoDB Atlas; **file đính kèm ở Amazon S3** (từ 09/2026, tối đa 200MB/file).
 
 - **Production:** https://bim-ruddy.vercel.app
 - **Vercel project:** `bim` thuộc tài khoản `nguyenvhuyutc-9517`
@@ -15,15 +15,15 @@ quyền deploy, nhưng dùng chung MongoDB nên dữ liệu hai bên giống nha
 |---|---|
 | `bang-hang-muc.html` | Toàn bộ giao diện — trang gốc `/` rewrite về đây |
 | `api/data.js` | Serverless function đọc/ghi dữ liệu bảng vào MongoDB |
-| `api/files.js` | Ký presigned URL cho R2 + ghi metadata file vào MongoDB |
-| `scripts/don-file-mo-coi.mjs` | Dọn file mồ côi trên R2 — chạy tay, xoá được dữ liệu thật |
+| `api/files.js` | Ký presigned URL cho S3 + ghi metadata file vào MongoDB |
+| `scripts/don-file-mo-coi.mjs` | Dọn file mồ côi trên S3 — chạy tay, xoá được dữ liệu thật |
 | `vercel.json` | Rewrite trang gốc + CORS + `functions.maxDuration` |
 | `serve.cjs`, `start-server.bat`, `data.json` | **Tư liệu, KHÔNG chạy được nữa** — xem § Bản LAN |
 
-**File đính kèm:** client PUT thẳng lên R2, function chỉ ký URL. MongoDB chỉ giữ
+**File đính kèm:** client PUT thẳng lên S3, function chỉ ký URL. MongoDB chỉ giữ
 metadata (`{key, status, size}`). File tải lên **trước 09/2026** vẫn nằm trong
 MongoDB dạng `data`/`chunks` và vẫn đọc được — hai đường chạy song song, không
-migrate. Chi tiết + ba cái bẫy dễ sập: [docs/luu-file-r2.md](docs/luu-file-r2.md).
+migrate. Chi tiết + ba cái bẫy dễ sập: [docs/luu-file-s3.md](docs/luu-file-s3.md).
 
 ## Môi trường
 
@@ -82,11 +82,14 @@ bị khoá theo — muốn chặn triệt để phải đổi mật khẩu Mongo
   ngoài repo. Không ghi token vào bất kỳ file nào trong project.
 - Project có kết nối GitHub repo `nguyenvhuyutc-gif/document` → push lên repo đó
   cũng kích hoạt deploy tự động.
-- 4 biến R2 (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
-  `R2_BUCKET`) đặt trên Vercel, tách riêng Production và Preview. Preview dùng
-  bucket `bim-files-preview` và `MONGODB_DB=bim_preview` để kiểm thử không đụng
-  dữ liệu thật. Access Key ID **có** nằm trong mọi URL đã ký — đó là bản chất
-  SigV4, không phải rò rỉ; chỉ `R2_SECRET_ACCESS_KEY` mới phải giữ kín.
+- 4 biến S3 (`S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
+  `S3_BUCKET`) đặt trên Vercel, tách riêng Production và Preview. Preview dùng
+  bucket riêng và `MONGODB_DB=bim_preview` để kiểm thử không đụng dữ liệu thật.
+  Access Key ID **có** nằm trong mọi URL đã ký — đó là bản chất SigV4, không
+  phải rò rỉ; chỉ `S3_SECRET_ACCESS_KEY` mới phải giữ kín.
+- URL S3 dùng **path-style** (`https://s3.<vùng>.amazonaws.com/<bucket>/<key>`),
+  không phải virtual-hosted — tên bucket có dấu chấm nên chứng chỉ TLS
+  `*.s3.<vùng>.amazonaws.com` không khớp. **Đừng "sửa" thành virtual-hosted.**
 - `.vercelignore` chặn `*.md`, `docs`, `plans`, `scripts`, `scratch` — **đừng gỡ**.
   Vercel phục vụ mọi file tĩnh, nên bỏ ra là `https://…/CLAUDE.md` mở được công khai.
 
@@ -107,7 +110,7 @@ Giữ file làm tư liệu, đã gỡ script `npm start` / `dev` / `serve`. Ch�
 `bang-hang-muc.html` dùng chung, mà giao diện nay gọi `?action=sign-upload` —
 `serve.cjs` không có route đó nên **mọi lần tải file lên sẽ báo "File rỗng"**.
 Đừng "sửa lỗi" đó bằng cách đổi giao diện; đọc § Muốn dựng lại bản LAN trong
-[docs/luu-file-r2.md](docs/luu-file-r2.md).
+[docs/luu-file-s3.md](docs/luu-file-s3.md).
 
 ## Responses / Results / Questions / Suggests
 Write all results, questions, and suggestions in Vietnamese with proper diacritics.

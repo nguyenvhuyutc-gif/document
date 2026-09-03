@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-//  Dọn file mồ côi trên Cloudflare R2 — CHẠY TAY, không bao giờ tự động.
+//  Dọn file mồ côi trên Amazon S3 — CHẠY TAY, không bao giờ tự động.
 //
 //  SCRIPT NÀY XOÁ ĐƯỢC DỮ LIỆU THẬT. Mặc định chỉ chạy khô và in ra.
 //
@@ -8,7 +8,7 @@
 //    node scripts/don-file-mo-coi.mjs --xoa    # xoá thật, bắt gõ lại tên bucket
 //
 //  Hai chiều kiểm tra:
-//    A. Object trên R2 mà không doc nào trong bim_files trỏ tới  → xoá được
+//    A. Object trên S3 mà không doc nào trong bim_files trỏ tới  → xoá được
 //    B. Doc trong bim_files mà không dòng nào trong bim_app trỏ tới → CHỈ BÁO CÁO
 //
 //  Vì sao chiều B tồn tại: có BỐN đường sinh file mồ côi chứ không phải một —
@@ -50,19 +50,22 @@ function thoat(msg) {
   process.exit(1);
 }
 
-// ---- R2 ----
-function taoR2() {
-  const thieu = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"]
+// ---- S3 ----
+// Đọc env và dựng base URL ĐÚNG NHƯ api/files.js làm — hai chỗ này phải khớp,
+// lệch một chữ là script nhìn vào bucket khác với bucket ứng dụng đang ghi.
+function taoS3() {
+  const thieu = ["S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET"]
     .filter((k) => !process.env[k]);
-  if (thieu.length) thoat("thiếu biến môi trường R2: " + thieu.join(", "));
+  if (thieu.length) thoat("thiếu biến môi trường S3: " + thieu.join(", "));
   return {
     client: new AwsClient({
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      accessKeyId: process.env.S3_ACCESS_KEY_ID,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
       service: "s3",
-      region: "auto",
+      region: process.env.S3_REGION,
     }),
-    base: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${process.env.R2_BUCKET}`,
+    // PATH-STYLE — bắt buộc vì tên bucket có dấu chấm (xem ghi chú ở api/files.js).
+    base: `https://s3.${process.env.S3_REGION}.amazonaws.com/${process.env.S3_BUCKET}`,
   };
 }
 
@@ -74,15 +77,17 @@ function goXml(s) {
 // Liệt kê TOÀN BỘ object — phân trang đầy đủ. Trang lỗi thì ném, không trả về
 // danh sách đọc dở: coi kết quả dở dang là "danh sách đầy đủ" chính là cách
 // script này biến cả kho thành rác.
-async function lietKeR2(r2) {
+async function lietKeS3(s3) {
   const keys = new Map();          // key -> size
   let token = null, trang = 0;
   do {
-    const u = new URL(r2.base + "/");
+    // KHÔNG thêm dấu "/" sau tên bucket: path-style thì ListObjectsV2 là
+    // `GET /<bucket>?list-type=2`, thêm slash biến nó thành key rỗng.
+    const u = new URL(s3.base);
     u.searchParams.set("list-type", "2");
     u.searchParams.set("max-keys", "1000");
     if (token) u.searchParams.set("continuation-token", token);
-    const res = await r2.client.fetch(u.toString(), { method: "GET" });
+    const res = await s3.client.fetch(u.toString(), { method: "GET" });
     if (!res.ok) throw new Error(`ListObjectsV2 trả HTTP ${res.status} ở trang ${trang + 1}`);
     const xml = await res.text();
     for (const m of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
@@ -106,7 +111,7 @@ const coEnv = napEnv();
 const dbName = process.env.MONGODB_DB || "bim";
 const colFiles = process.env.MONGODB_FILES_COLLECTION || "bim_files";
 const colApp = process.env.MONGODB_COLLECTION || "bim_app";
-const bucket = process.env.R2_BUCKET || "";
+const bucket = process.env.S3_BUCKET || "";
 
 console.log("\n╔══════════════════════════════════════════════════════════╗");
 console.log("║  DỌN FILE MỒ CÔI — ĐỌC KỸ CẤU HÌNH ĐÃ PHÂN GIẢI BÊN DƯỚI  ║");
@@ -115,7 +120,7 @@ console.log("  nguồn cấu hình  : " + (coEnv ? path.join(ROOT, ".env") : "ch
 console.log("  database        : " + dbName);
 console.log("  collection file : " + colFiles);
 console.log("  collection bảng : " + colApp);
-console.log("  bucket R2       : " + (bucket || "(chưa đặt)"));
+console.log("  bucket S3       : " + (bucket || "(chưa đặt)"));
 console.log("  chế độ          : " + (XOA ? ">>> XOÁ THẬT <<<" : "chạy khô (chỉ in ra)"));
 console.log("");
 console.log("  Nếu bất kỳ dòng nào ở trên KHÔNG đúng với môi trường bạn định dọn,");
@@ -123,16 +128,16 @@ console.log("  hãy Ctrl+C ngay. Lệch database hay lệch collection đều bi
 console.log("  nhau — thành 'toàn bộ kho là rác'.\n");
 
 if (!process.env.MONGODB_URI) thoat("thiếu MONGODB_URI");
-const r2 = taoR2();
+const s3 = taoS3();
 const mongo = new MongoClient(process.env.MONGODB_URI);
 
 try {
   await mongo.connect();
   const db = mongo.db(dbName);
 
-  // ---- 1. toàn bộ object trên R2 ----
-  process.stdout.write("Đang liệt kê object trên R2… ");
-  const objects = await lietKeR2(r2);
+  // ---- 1. toàn bộ object trên S3 ----
+  process.stdout.write("Đang liệt kê object trên S3… ");
+  const objects = await lietKeS3(s3);
   console.log(objects.size + " object");
 
   // ---- 2. toàn bộ key trong MongoDB ----
@@ -177,7 +182,7 @@ try {
   }
 
   // ---- 4. báo cáo chiều A ----
-  console.log("\n── Chiều A: object trên R2 không doc nào trỏ tới ──");
+  console.log("\n── Chiều A: object trên S3 không doc nào trỏ tới ──");
   if (!orphan.length) console.log("  (không có)");
   else {
     for (const k of orphan.slice(0, 50)) console.log("  " + k + "   " + mb(objects.get(k) || 0));
@@ -234,7 +239,7 @@ try {
     let ok = 0, loi = 0;
     for (const k of canXoa) {
       try {
-        const res = await r2.client.fetch(r2.base + "/" + k, { method: "DELETE" });
+        const res = await s3.client.fetch(s3.base + "/" + k, { method: "DELETE" });
         if (res.ok || res.status === 404) ok++;
         else { loi++; console.error("  lỗi HTTP " + res.status + " khi xoá " + k); }
       } catch (e) { loi++; console.error("  lỗi khi xoá " + k + ": " + e.message); }

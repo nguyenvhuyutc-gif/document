@@ -5,7 +5,7 @@ function, chạy trên Vercel.
 
 - **Địa chỉ dùng thật:** <https://bim-ruddy.vercel.app>
 - **Dữ liệu bảng:** MongoDB Atlas
-- **File đính kèm:** Cloudflare R2 (tối đa **200MB/file**)
+- **File đính kèm:** Amazon S3 (tối đa **200MB/file**)
 
 ---
 
@@ -16,9 +16,9 @@ document/
 ├─ bang-hang-muc.html   ← toàn bộ giao diện; trang gốc "/" rewrite về đây
 ├─ api/
 │  ├─ data.js           ← đọc/ghi dữ liệu bảng vào MongoDB
-│  └─ files.js          ← ký presigned URL cho R2 + ghi metadata file
+│  └─ files.js          ← ký presigned URL cho S3 + ghi metadata file
 ├─ scripts/
-│  └─ don-file-mo-coi.mjs  ← dọn file mồ côi trên R2 (chạy tay, không tự động)
+│  └─ don-file-mo-coi.mjs  ← dọn file mồ côi trên S3 (chạy tay, không tự động)
 ├─ vercel.json          ← rewrite trang gốc, CORS, giới hạn thời gian function
 ├─ .env.example         ← mẫu biến môi trường (copy thành .env để chạy script)
 ├─ docs/                ← tài liệu kỹ thuật
@@ -29,19 +29,19 @@ document/
 
 ## Cách file đính kèm hoạt động
 
-Client tải file **thẳng lên Cloudflare R2**, không đi qua Vercel. Function chỉ ký
+Client tải file **thẳng lên Amazon S3**, không đi qua Vercel. Function chỉ ký
 URL có hạn và ghi metadata:
 
 ```text
 TẢI LÊN   client → POST /api/files?action=sign-upload   → { uploadUrl, id, key }
-          client → PUT thẳng lên R2 (kèm Content-Disposition + Content-Type)
+          client → PUT thẳng lên S3 (kèm Content-Disposition + Content-Type)
           client → POST /api/files?action=confirm       → ghi metadata
 
-TẢI XUỐNG client → GET /api/files?id=…  → 302 sang R2 (URL ký, hạn 5 phút)
+TẢI XUỐNG client → GET /api/files?id=…  → 302 sang S3 (URL ký, hạn 5 phút)
 ```
 
 Nhờ vậy không còn vướng giới hạn body ~4.5MB của Vercel lẫn giới hạn
-16MB/document của MongoDB. Chi tiết ở **[docs/luu-file-r2.md](docs/luu-file-r2.md)**.
+16MB/document của MongoDB. Chi tiết ở **[docs/luu-file-s3.md](docs/luu-file-s3.md)**.
 
 File tải lên **trước 09/2026** vẫn nằm trong MongoDB và vẫn tải xuống bình thường —
 không migrate. Hai đường đọc chạy song song.
@@ -55,7 +55,7 @@ npm run vercel:env       # kéo biến môi trường production về .env
 npm run vercel:logs      # xem log runtime của function
 ```
 
-Dọn file mồ côi trên R2 (mặc định chỉ chạy khô, in ra):
+Dọn file mồ côi trên S3 (mặc định chỉ chạy khô, in ra):
 
 ```bash
 node scripts/don-file-mo-coi.mjs
@@ -65,13 +65,13 @@ node scripts/don-file-mo-coi.mjs
 
 | File | Nội dung |
 |---|---|
-| [docs/luu-file-r2.md](docs/luu-file-r2.md) | Kiến trúc lưu file, biến môi trường R2, xoay khoá, script dọn |
+| [docs/luu-file-s3.md](docs/luu-file-s3.md) | Kiến trúc lưu file, biến môi trường S3, xoay khoá, script dọn |
 | [docs/phan-quyen-mat-khau.md](docs/phan-quyen-mat-khau.md) | Hai mật khẩu `EDIT_KEY` / `ADMIN_KEY` |
 | [HUONG-DAN-DEPLOY.md](HUONG-DAN-DEPLOY.md) | Thiết lập MongoDB Atlas + deploy Vercel |
 | [SO-TAY-CAU-LENH.md](SO-TAY-CAU-LENH.md) | Sổ tay câu lệnh, giải thích từng lệnh |
 | [CLAUDE.md](CLAUDE.md) | Ghi chú cho người/máy sửa mã nguồn |
 
-Bảo mật: `.env` chứa connection string MongoDB và khoá R2 — **không bao giờ**
+Bảo mật: `.env` chứa connection string MongoDB và khoá S3 — **không bao giờ**
 commit hay deploy. `.vercelignore` chặn `*.md`, `docs`, `plans`, `scripts`,
 `scratch` để chúng không mở được công khai qua `https://…/CLAUDE.md`.
 
@@ -91,7 +91,7 @@ diện nay gọi `?action=sign-upload`, mà `serve.cjs` không có route đó �
 đều báo "File rỗng"**. Khối chú thích ở đầu `serve.cjs` nói rõ điều này.
 
 Muốn dùng lại bản LAN thì phải cài thêm 3 route `sign-upload` / `confirm` / GET
-302 vào `serve.cjs` — xem [docs/luu-file-r2.md](docs/luu-file-r2.md).
+302 vào `serve.cjs` — xem [docs/luu-file-s3.md](docs/luu-file-s3.md).
 
 Mở thẳng `bang-hang-muc.html` bằng `file://` vẫn chạy được ở chế độ lưu riêng
 (localStorage, huy hiệu 🟡), không gọi API nào. Chế độ đó giới hạn 8MB/file.

@@ -2,7 +2,7 @@
   "name": "bang-theo-doi-hang-muc",
   "version": "1.0.0",
   "private": true,
-  "description": "Bảng theo dõi hạng mục (WBS) — chạy trên Vercel, dữ liệu bảng ở MongoDB Atlas, file đính kèm ở Cloudflare R2.",
+  "description": "Bảng theo dõi hạng mục (WBS) — chạy trên Vercel, dữ liệu bảng ở MongoDB Atlas, file đính kèm ở Amazon S3.",
   "scripts": {
     "vercel-build": "echo 'No build required'",
     "deploy": "vercel deploy --prod",

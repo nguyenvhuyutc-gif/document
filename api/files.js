@@ -1,24 +1,24 @@
 // ============================================================
-//  API file đính kèm — file lưu ở Cloudflare R2, MongoDB chỉ giữ metadata.
+//  API file đính kèm — file lưu ở Amazon S3, MongoDB chỉ giữ metadata.
 //
-//  TẢI LÊN (3 bước, client đẩy thẳng lên R2, function chỉ ký URL):
+//  TẢI LÊN (3 bước, client đẩy thẳng lên S3, function chỉ ký URL):
 //   POST /api/files?action=sign-upload&name=&type=&size=   (cần EDIT_KEY)
 //        -> ghi doc {status:"pending"}, trả { ok, id, key, uploadUrl }
 //   (client tự PUT thẳng lên uploadUrl, KÈM header Content-Disposition + Content-Type)
 //   POST /api/files?action=confirm&id=&key=                (cần EDIT_KEY)
-//        -> xác minh bằng HEAD trên R2, chuyển pending -> ready
+//        -> xác minh bằng HEAD trên S3, chuyển pending -> ready
 //        -> { ok, file: { id, name, size, type, url } }
 //
 //  TẢI XUỐNG (tự do, không cần mật khẩu):
-//   GET  /api/files?id=<id>          -> file mới: 302 sang R2 (URL ký, 5 phút)
+//   GET  /api/files?id=<id>          -> file mới: 302 sang S3 (URL ký, 5 phút)
 //                                    -> file cũ:  trả thẳng từ MongoDB như trước
 //   GET  /api/files?id=<id>&part=<i> -> mảnh thứ i của file cũ chia mảnh
 //
-//   DELETE /api/files?id=<id>        -> xoá object R2 + doc (cần ADMIN_KEY)
+//   DELETE /api/files?id=<id>        -> xoá object S3 + doc (cần ADMIN_KEY)
 //
 //  File CŨ (nguyên khối `data`, hoặc chia mảnh `chunks`) vẫn đọc từ MongoDB —
-//  không migrate, không đụng tới. Đường đọc đó KHÔNG bao giờ chạm tới R2, nên
-//  thiếu biến môi trường R2 cũng không làm hỏng việc tải file cũ.
+//  không migrate, không đụng tới. Đường đọc đó KHÔNG bao giờ chạm tới S3, nên
+//  thiếu biến môi trường S3 cũng không làm hỏng việc tải file cũ.
 // ============================================================
 const { MongoClient } = require("mongodb");
 const crypto = require("crypto");
@@ -28,7 +28,7 @@ const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB || "bim";
 const filesCollection = process.env.MONGODB_FILES_COLLECTION || "bim_files";
 
-const MAX_UPLOAD = 200 * 1024 * 1024;       // giới hạn 1 file (R2 không giới hạn, đây là chính sách)
+const MAX_UPLOAD = 200 * 1024 * 1024;       // giới hạn 1 file (S3 không giới hạn, đây là chính sách)
 
 // ---- phân quyền (giống api/data.js): EDIT_KEY = tải file lên, ADMIN_KEY = thêm quyền xoá ----
 function safeEqual(a, b) {
@@ -59,35 +59,45 @@ async function connectMongo() {
   return { client, db };
 }
 
-// ---- Cloudflare R2 ----
+// ---- Amazon S3 ----
 // KHỞI TẠO LƯỜI, đúng nếp connectMongo() ở trên.
-// KHÔNG dựng AwsClient ở tầng module: nếu 4 biến R2 thiếu hoặc RỖNG (bẫy đã biết
+// KHÔNG dựng AwsClient ở tầng module: nếu 4 biến S3 thiếu hoặc RỖNG (bẫy đã biết
 // của `vercel env add`, xem .claude/skills/deploy-bim/SKILL.md) thì hoặc là module
 // ném lỗi lúc nạp và TOÀN BỘ /api/files trả 500 — kể cả GET file cũ trong MongoDB,
 // thứ mà đường lai sinh ra để bảo vệ — hoặc là base URL thành
-// "https://undefined.r2.…/undefined" và sign-upload trả 200 với URL trông hợp lệ,
-// đẩy lỗi xuống tận xhr.onerror ở client dưới dạng "mất kết nối khi tải lên".
-let _r2 = null;
-function getR2() {
-  if (_r2) return _r2;
-  const miss = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"]
+// "https://s3.undefined.amazonaws.com/undefined" và sign-upload trả 200 với URL
+// trông hợp lệ, đẩy lỗi xuống tận xhr.onerror ở client dưới dạng "mất kết nối
+// khi tải lên".
+//
+// S3_REGION phải khớp TUYỆT ĐỐI với vùng của bucket: SigV4 nhét vùng vào
+// credential scope, nên sai vùng là 403 ở mọi request — và thông báo lỗi của S3
+// không hề nhắc tới vùng.
+let _s3 = null;
+function getS3() {
+  if (_s3) return _s3;
+  const miss = ["S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET"]
     .filter((k) => !process.env[k]);
-  if (miss.length) throw new Error("Thiếu biến môi trường R2: " + miss.join(", "));
-  _r2 = {
+  if (miss.length) throw new Error("Thiếu biến môi trường S3: " + miss.join(", "));
+  _s3 = {
     client: new AwsClient({
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      accessKeyId: process.env.S3_ACCESS_KEY_ID,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
       service: "s3",
-      region: "auto",
+      region: process.env.S3_REGION,
     }),
-    base: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${process.env.R2_BUCKET}`,
+    // PATH-STYLE (bucket nằm trong path), KHÔNG phải virtual-hosted style.
+    // Bắt buộc vì tên bucket có dấu chấm: virtual-hosted sẽ thành
+    // "com.vcijsc.bvtc.s3.ap-southeast-1.amazonaws.com", mà chứng chỉ TLS
+    // "*.s3.<vùng>.amazonaws.com" chỉ khớp MỘT nhãn → lỗi TLS ở mọi request.
+    // Path-style chạy với mọi tên bucket nên không cần rẽ nhánh.
+    base: `https://s3.${process.env.S3_REGION}.amazonaws.com/${process.env.S3_BUCKET}`,
   };
-  return _r2;
+  return _s3;
 }
 
 // Ký URL có hạn. signQuery: true → chữ ký nằm trong query string, và aws4fetch
 // chỉ ký đúng header `host` (X-Amz-SignedHeaders=host). Nhờ đó client gửi thêm
-// Content-Disposition / Content-Type lúc PUT cũng không làm lệch chữ ký, mà R2
+// Content-Disposition / Content-Type lúc PUT cũng không làm lệch chữ ký, mà S3
 // vẫn lưu chúng làm metadata của object.
 //
 // LƯU Ý: method là DÒNG ĐẦU TIÊN của canonical request trong SigV4 — URL ký cho
@@ -97,8 +107,8 @@ function getR2() {
 // aws4fetch dựng canonical query bằng encodeRfc3986(encodeURIComponent(v))
 // (space → %20, * → %2A) còn URL gửi đi lấy từ URL.toString() (space → +, * → *).
 // Chuỗi Content-Disposition chứa cả hai ký tự đó → chữ ký lệch → 403 mọi file.
-async function signR2(key, method, expires) {
-  const { client, base } = getR2();
+async function signS3(key, method, expires) {
+  const { client, base } = getS3();
   const u = new URL(`${base}/${key}`);
   u.searchParams.set("X-Amz-Expires", String(expires));
   const signed = await client.sign(u.toString(), { method, aws: { signQuery: true } });
@@ -160,7 +170,7 @@ module.exports = async (req, res) => {
     const { db } = await connectMongo();
     const col = db.collection(filesCollection);
 
-    // ---- Bước 1: xin URL để tải thẳng lên R2 ----
+    // ---- Bước 1: xin URL để tải thẳng lên S3 ----
     if (req.method === "POST" && action === "sign-upload") {
       const name = url.searchParams.get("name") || "file";
       const type = url.searchParams.get("type") || "application/octet-stream";
@@ -178,11 +188,11 @@ module.exports = async (req, res) => {
       const key = makeKey(name);
       const newId = crypto.randomBytes(12).toString("hex");
       // KÝ TRƯỚC, ghi doc SAU. Ký là tính toán cục bộ, không gọi mạng, nhưng nó
-      // ném lỗi khi 4 biến R2 thiếu hoặc rỗng. Ghi doc trước thì mỗi lần thử sẽ
+      // ném lỗi khi 4 biến S3 thiếu hoặc rỗng. Ghi doc trước thì mỗi lần thử sẽ
       // để lại một doc `pending` mồ côi — và retryUp ở client thử 3 lần, còn script
       // dọn thì CỐ Ý không bao giờ đụng tới doc pending. Ký trước thì lỗi xảy ra
       // khi chưa có gì được ghi và chưa ai nhận được URL nào.
-      const uploadUrl = await signR2(key, "PUT", 900);       // 15 phút
+      const uploadUrl = await signS3(key, "PUT", 900);       // 15 phút
       // Ghi doc `pending` để ràng id ↔ key ↔ người ký một cách nguyên tử, TRƯỚC khi
       // trả URL ra ngoài. Nhờ đó confirm không thể ghi metadata trỏ vào key của
       // người khác (key KHÔNG phải bí mật — nó nằm trong path của mọi URL đã ký),
@@ -193,7 +203,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // ---- Bước 2: xác nhận đã lên R2, ghi metadata ----
+    // ---- Bước 2: xác nhận đã lên S3, ghi metadata ----
     if (req.method === "POST" && action === "confirm") {
       const key = url.searchParams.get("key") || "";
       if (!id) { res.status(400).json({ ok: false, error: "Thiếu id" }); return; }
@@ -207,7 +217,7 @@ module.exports = async (req, res) => {
       // Idempotent: retryUp ở client bọc lời gọi này, nên khi lần đầu thành công mà
       // response mất (cold start, Wi-Fi đổi sang 4G) thì lần thử lại phải trả 200 y hệt.
       // Không có nhánh này thì client thấy ok=false → save() không chạy → file 200MB
-      // nằm trong R2 mà không dòng nào trỏ tới, còn người dùng bị báo là thất bại.
+      // nằm trong S3 mà không dòng nào trỏ tới, còn người dùng bị báo là thất bại.
       if (doc.status === "ready") {
         res.status(200).json({ ok: true, file: fileOf(doc) });
         return;
@@ -223,12 +233,12 @@ module.exports = async (req, res) => {
       // nó thành "máy chủ trả lỗi HTTP 504" — sau khi 200MB đã truyền xong.
       let head;
       try {
-        head = await fetch(await signR2(key, "HEAD", 300), {
+        head = await fetch(await signS3(key, "HEAD", 300), {
           method: "HEAD",
           signal: AbortSignal.timeout(5000),
         });
       } catch (e) {
-        console.error("confirm: HEAD toi R2 that bai", e);
+        console.error("confirm: HEAD toi S3 that bai", e);
         res.status(503).json({ ok: false, error: "Kho lưu trữ không phản hồi, hãy thử lại" });
         return;
       }
@@ -239,12 +249,12 @@ module.exports = async (req, res) => {
         return;
       }
       if (head.status === 403) {
-        console.error("confirm: R2 tra 403 — sai chu ky hoac sai quyen khoa API");
+        console.error("confirm: S3 tra 403 — sai chu ky hoac sai quyen khoa API");
         res.status(500).json({ ok: false, error: "Lỗi chữ ký khi kiểm tra file" });
         return;
       }
       if (!head.ok) {
-        console.error("confirm: R2 tra HTTP " + head.status);
+        console.error("confirm: S3 tra HTTP " + head.status);
         res.status(503).json({ ok: false, error: "Kho lưu trữ trả lỗi, hãy thử lại" });
         return;
       }
@@ -257,7 +267,7 @@ module.exports = async (req, res) => {
         return;
       }
       if (size > MAX_UPLOAD) {
-        try { await fetch(await signR2(key, "DELETE", 300), { method: "DELETE", signal: AbortSignal.timeout(5000) }); }
+        try { await fetch(await signS3(key, "DELETE", 300), { method: "DELETE", signal: AbortSignal.timeout(5000) }); }
         catch (e) { console.error("confirm: khong xoa duoc object qua lon", e); }
         await col.deleteOne({ _id: id, status: "pending" });
         res.status(413).json({ ok: false, error: "File quá lớn (giới hạn 200MB)" });
@@ -292,7 +302,7 @@ module.exports = async (req, res) => {
       const doc = await col.findOne({ _id: id });
       if (!doc) { res.status(404).json({ ok: false, error: "Không tìm thấy file" }); return; }
 
-      // ---- FILE MỚI: chuyển hướng thẳng sang R2 ----
+      // ---- FILE MỚI: chuyển hướng thẳng sang S3 ----
       if (doc.key) {
         if (doc.status !== "ready") {
           // doc pending = phiên tải lên chưa xong, chưa phải một file
@@ -301,13 +311,13 @@ module.exports = async (req, res) => {
         }
         // no-store là BẮT BUỘC. Code file cũ bên dưới đặt max-age=31536000, immutable;
         // để header đó rơi vào nhánh này là nhét một credential 5 phút vào cache 1 năm:
-        // 5 phút sau mọi lần bấm đều nhận AccessDenied từ R2, không xoá được nếu không
+        // 5 phút sau mọi lần bấm đều nhận AccessDenied từ S3, không xoá được nếu không
         // xoá dữ liệu site. Người dùng báo "file hỏng" trong khi file hoàn toàn nguyên vẹn.
         //
         // Tên file và MIME KHÔNG cần tham số response-* — chúng đã nằm sẵn trên object
         // (client gắn Content-Disposition + Content-Type lúc PUT).
         res.setHeader("Cache-Control", "private, no-store");
-        res.setHeader("Location", await signR2(doc.key, "GET", 300));
+        res.setHeader("Location", await signS3(doc.key, "GET", 300));
         res.status(302).end();
         return;
       }
@@ -366,7 +376,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // ---- Xoá file (object R2 hoặc mọi mảnh trong MongoDB) ----
+    // ---- Xoá file (object S3 hoặc mọi mảnh trong MongoDB) ----
     if (req.method === "DELETE") {
       if (!id) { res.status(400).json({ ok: false, error: "Thiếu id" }); return; }
       const doc = await col.findOne({ _id: id }, { projection: { key: 1, chunks: 1 } });
@@ -378,8 +388,8 @@ module.exports = async (req, res) => {
       if (doc.key) {
         // Xoá object hỏng thì VẪN xoá metadata và trả ok — metadata trỏ vào hư không
         // tệ hơn một file mồ côi. Ghi log để còn dấu vết cho script dọn.
-        try { await fetch(await signR2(doc.key, "DELETE", 300), { method: "DELETE", signal: AbortSignal.timeout(5000) }); }
-        catch (e) { console.error("DELETE: khong xoa duoc object R2 " + doc.key, e); }
+        try { await fetch(await signS3(doc.key, "DELETE", 300), { method: "DELETE", signal: AbortSignal.timeout(5000) }); }
+        catch (e) { console.error("DELETE: khong xoa duoc object S3 " + doc.key, e); }
       }
       if (Array.isArray(doc.chunks) && doc.chunks.length) {
         await col.deleteMany({ _id: { $in: doc.chunks } });

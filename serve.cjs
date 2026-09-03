@@ -1,13 +1,13 @@
 // ============================================================
 //  KHÔNG CÒN DÙNG — giữ lại làm tư liệu, KHÔNG chạy được nữa.
 //
-//  Từ 09/2026, file đính kèm lưu ở Cloudflare R2 qua presigned URL.
+//  Từ 09/2026, file đính kèm lưu ở Amazon S3 qua presigned URL.
 //  bang-hang-muc.html (dùng chung với bản Vercel) gọi ?action=sign-upload,
 //  mà máy chủ này không có route đó → mọi lần tải file lên sẽ báo "File rỗng".
 //  Phần bảng biểu vẫn chạy; chỉ riêng tải file lên là hỏng.
 //
 //  Muốn dùng lại phải cài thêm 3 route ở đây: sign-upload, confirm, và GET
-//  chuyển hướng 302 — xem docs/luu-file-r2.md.
+//  chuyển hướng 302 — xem docs/luu-file-s3.md.
 //
 //  Các script npm start / dev / serve đã bị gỡ khỏi package.json để không ai
 //  vô tình chạy bằng lệnh quen.

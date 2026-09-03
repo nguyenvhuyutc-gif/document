@@ -690,6 +690,22 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: none; }
 
+  /* ---------- Dải cảnh báo xung đột khi lưu ----------
+     Ở lại cho tới khi người dùng bấm một trong hai nút — không đóng được bằng Esc,
+     không tự tắt. Trong lúc nó hiện, vòng đồng bộ dừng hẳn (syncPaused); nếu không
+     thì lần đồng bộ kế tiếp sẽ kéo bản của người kia về và xoá luôn màn hình của
+     người này, đúng cái lỗi dải cảnh báo này sinh ra để chặn. */
+  .conflict {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 400;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: 10px 18px; padding: 12px 18px;
+    background: var(--surface); border-bottom: 2px solid var(--danger);
+    box-shadow: var(--shadow); font-size: .86rem; color: var(--text-mid);
+  }
+  .conflict strong { color: var(--danger); font-weight: 650; }
+  .conflict b { color: var(--text-hi); font-weight: 650; }
+  .conflict__acts { display: flex; gap: 8px; flex: none; }
+
   /* ---- phân quyền: chỉ xem → ẩn mọi nút sửa và mọi tuỳ chọn hiển thị;
          không phải quản trị → ẩn nút xoá ---- */
   body.is-viewonly #btnAdd, body.is-viewonly #btnDel, body.is-viewonly #btnImport, body.is-viewonly #btnHide,
@@ -860,6 +876,14 @@
 
 <div class="toast" id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
 
+<div class="conflict" id="conflictBar" hidden>
+  <span><strong>⚠ Có người khác vừa sửa bảng này.</strong> Thay đổi của bạn <b>chưa được lưu</b>.</span>
+  <span class="conflict__acts">
+    <button type="button" class="btn" id="btnConflictTake" title="Lấy bản trên máy chủ về — thay đổi đang chờ của bạn sẽ mất">Xem bản mới</button>
+    <button type="button" class="btn btn--danger" id="btnConflictForce" title="Lưu đè bản của bạn lên — thay đổi của người kia sẽ mất">Ghi đè bằng bản của tôi</button>
+  </span>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -966,7 +990,9 @@
   var serverMtime = 0;
   var savePending = false;
   var saveTimer = null;
-  var filesBusy = false;      // đang tải file lên → tạm dừng đồng bộ để không ghi đè
+  var filesBusy = false;      // đang gắn file vừa tải xong vào dòng → tạm dừng đồng bộ
+  var syncPaused = false;     // dải cảnh báo xung đột đang hiện → dừng hẳn đồng bộ
+  var conflictData = null;    // bản trên máy chủ mà máy chủ trả kèm mã 409
 
   // ---- phân quyền (server mới là nơi chặn thật — đây chỉ là giao diện) ----
   // authProtected = máy chủ có đặt EDIT_KEY/ADMIN_KEY; role = quyền của mật khẩu đang lưu
@@ -1101,14 +1127,61 @@
   function pushToServer() {
     if (!state.planId) { savePending = false; return; }
     var payload = JSON.stringify({ rows: state.rows, people: state.people, statuses: state.statuses });
-    fetch(API + "?plan=" + encodeURIComponent(state.planId), { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: payload })
+    // ifMtime = bản mà mình đã đọc. Máy chủ chỉ ghi khi document vẫn còn đúng bản đó;
+    // khác đi thì trả 409 kèm bản mới thay vì lặng lẽ ghi đè sửa của người khác.
+    fetch(API + "?plan=" + encodeURIComponent(state.planId) + "&ifMtime=" + (serverMtime || 0),
+      { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: payload })
       .then(function (r) { return r.json(); })
       .then(function (j) {
+        // 409 = có người khác đã lưu trong lúc mình đang sửa. Đây là lúc DUY NHẤT
+        // người dùng có đủ thông tin để quyết định, nên phải hỏi chứ không tự xử.
+        // Không gộp tự động: dữ liệu là mảng dòng có thứ tự và người dùng sửa được
+        // mọi ô, nên gộp máy sẽ sai âm thầm — tệ hơn cả lỗi đang sửa.
+        if (j && j.conflict) { showConflictBanner(j); return; }
         if (j && j.ok) { serverMtime = j.mtime || serverMtime; savePending = false; setMode("server"); }
         else if (j && j.needKey) { savePending = false; role = "view"; applyRole(); toast("Không có quyền sửa — đăng nhập rồi thử lại"); }
       })
       .catch(function () { savePending = false; setMode("server-err"); toast("Mất kết nối máy chủ — sẽ tự lưu lại khi có mạng"); });
   }
+
+  // ---- dải cảnh báo xung đột ----
+  function showConflictBanner(j) {
+    savePending = false;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    syncPaused = true;                 // dừng đồng bộ để bản đang sửa không bị nuốt
+    conflictData = j;
+    var bar = document.getElementById("conflictBar");
+    if (bar) bar.hidden = false;
+  }
+  function hideConflictBanner() {
+    syncPaused = false;
+    conflictData = null;
+    var bar = document.getElementById("conflictBar");
+    if (bar) bar.hidden = true;
+  }
+  // Xem bản mới: nạp bản trên máy chủ, mất thay đổi đang chờ của mình.
+  function conflictTakeServer() {
+    var j = conflictData;
+    if (j && j.data && Array.isArray(j.data.rows)) {
+      state.rows = j.data.rows;
+      state.people = j.data.people || [];
+      if (Array.isArray(j.data.statuses)) state.statuses = j.data.statuses;
+      state.rows.forEach(normalizeRowShape); migrateStatuses(); normalizeLevels();
+    }
+    serverMtime = (j && j.mtime) || 0;
+    hideConflictBanner();
+    render();
+    toast("Đã lấy bản mới nhất từ máy chủ");
+  }
+  // Ghi đè: lưu lại với mtime của bản đang nằm trên máy chủ — lần này điều kiện khớp.
+  function conflictForceMine() {
+    serverMtime = (conflictData && conflictData.mtime) || 0;
+    hideConflictBanner();
+    save();
+    toast("Đang ghi đè bằng bản của bạn…");
+  }
+  document.getElementById("btnConflictTake").addEventListener("click", conflictTakeServer);
+  document.getElementById("btnConflictForce").addEventListener("click", conflictForceMine);
   function save() {
     if (saveTimer) clearTimeout(saveTimer);
     if (!canEdit()) return;                    // chỉ xem → không đẩy gì lên máy chủ
@@ -1126,6 +1199,7 @@
     pollStarted = true;
     setInterval(function () {
       if (storageMode !== "server" || document.hidden) return;
+      if (syncPaused) return;                         // dải cảnh báo xung đột đang hiện
       if (!state.planId) {                            // đang ở danh sách kế hoạch → làm mới danh sách
         refreshPlanList();
         return;
@@ -3220,6 +3294,7 @@
     finishInit();
   }
   function resetTableState() {
+    hideConflictBanner();          // đổi kế hoạch → cảnh báo của kế hoạch cũ hết nghĩa
     state.selected = {}; state.focusId = null; state.query = "";
     if (searchEl) searchEl.value = "";
     Object.keys(state.colFilters).forEach(function (k) { state.colFilters[k] = ""; });

@@ -108,6 +108,18 @@ module.exports = async (req, res) => {
       const doc = await col.findOne({ _id: id });
       if (!doc) { res.status(404).json({ ok: false, error: "Không tìm thấy file" }); return; }
 
+      // Chốt an toàn cho tương lai: doc kiểu R2 (chỉ có `key`) lọt vào bản code này thì
+      // docBuffer() sẽ trả buffer rỗng mà không báo lỗi, và người dùng nhận file 0 byte
+      // kèm cache 1 năm. Thà hỏng ồn ào còn hơn hỏng im lặng.
+      if (!doc.data && !Array.isArray(doc.chunks)) {
+        res.setHeader("Cache-Control", "no-store");
+        res.status(410).json({
+          ok: false,
+          error: "File này lưu ở kho mới, bản web đang chạy chưa đọc được. Hãy tải lại trang."
+        });
+        return;
+      }
+
       // file chia mảnh + ?part=i -> trả riêng mảnh đó (client tự ghép)
       const partRaw = url.searchParams.get("part");
       if (Array.isArray(doc.chunks) && partRaw != null) {

@@ -8,6 +8,19 @@ serve.cjs
 start-server.bat
 data.json
 
+# Tài liệu — KHÔNG deploy. Vercel phục vụ mọi file tĩnh, nên file .md nằm trong
+# thư mục gốc sẽ mở được công khai qua https://…/CLAUDE.md và tương tự. Chúng
+# chứa kiến trúc, tên biến môi trường, tên user MongoDB — không có lý do gì để
+# lộ ra ngoài. Ứng dụng không đọc file .md nào lúc chạy.
+*.md
+docs
+plans
+
+# Script quản trị — chạy ở máy, tuyệt đối không nằm trong bundle production
+# (don-file-mo-coi.mjs có quyền xoá hàng loạt object trên R2)
+scripts
+scratch
+
 # Rác
 node_modules
 .DS_Store

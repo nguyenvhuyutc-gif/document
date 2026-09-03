@@ -151,8 +151,13 @@ module.exports = async (req, res) => {
       if (typeof payload !== "object" || payload === null) {
         return sendJson(res, 400, { ok: false, error: "Dữ liệu phải là JSON" });
       }
-      const updatedAt = Date.now();
       const ifMtime = Number(q.get("ifMtime") || 0);
+      let updatedAt = Date.now();
+      // mtime phải TĂNG THẬT SỰ sau mỗi lần ghi. Hai lần ghi rơi vào cùng một
+      // mili-giây sẽ sinh cùng một updatedAt, và điều kiện ifMtime của người lưu
+      // kế tiếp sẽ khớp nhầm — ghi đè im lặng, đúng cái lỗi đang sửa. Hiếm trong
+      // thực tế (save() có debounce 250ms) nhưng rẻ để chặn hẳn.
+      if (updatedAt <= ifMtime) updatedAt = ifMtime + 1;
 
       // ifMtime = 0 → giữ nguyên hành vi cũ (upsert). Cần cho hai trường hợp:
       // kế hoạch mới chưa có document, và các tab đang mở bản HTML cũ trong cache

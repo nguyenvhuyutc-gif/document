@@ -374,9 +374,16 @@
     transition: border-color .12s, color .12s, background .12s;
   }
   .file-add:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-weak); }
-  .files-cell.uploading { opacity: .55; pointer-events: none; }
+  /* Thanh tiến độ tải lên: nền ô đổ màu theo biến --up (0→1) do JS đặt.
+     Không thêm DOM mới — ô file được render lại liên tục trong lúc đồng bộ. */
+  .files-cell.uploading {
+    opacity: .55; pointer-events: none;
+    background: linear-gradient(to right,
+      var(--accent-weak) calc(var(--up, 0) * 100%),
+      transparent calc(var(--up, 0) * 100%));
+  }
   .files-cell.uploading .file-add { position: relative; }
-  .files-cell.uploading .file-add span::after { content: " · đang tải…"; }
+  .files-cell.uploading .file-add span::after { content: " · " attr(data-up) "%"; }
 
   /* ---------- Tình trạng hồ sơ (badge chấm + nền nhạt) ---------- */
   .status-cell { padding: 3px 6px; min-height: 36px; display: flex; align-items: center; }
@@ -683,6 +690,22 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: none; }
 
+  /* ---------- Dải cảnh báo xung đột khi lưu ----------
+     Ở lại cho tới khi người dùng bấm một trong hai nút — không đóng được bằng Esc,
+     không tự tắt. Trong lúc nó hiện, vòng đồng bộ dừng hẳn (syncPaused); nếu không
+     thì lần đồng bộ kế tiếp sẽ kéo bản của người kia về và xoá luôn màn hình của
+     người này, đúng cái lỗi dải cảnh báo này sinh ra để chặn. */
+  .conflict {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 400;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: 10px 18px; padding: 12px 18px;
+    background: var(--surface); border-bottom: 2px solid var(--danger);
+    box-shadow: var(--shadow); font-size: .86rem; color: var(--text-mid);
+  }
+  .conflict strong { color: var(--danger); font-weight: 650; }
+  .conflict b { color: var(--text-hi); font-weight: 650; }
+  .conflict__acts { display: flex; gap: 8px; flex: none; }
+
   /* ---- phân quyền: chỉ xem → ẩn mọi nút sửa và mọi tuỳ chọn hiển thị;
          không phải quản trị → ẩn nút xoá ---- */
   body.is-viewonly #btnAdd, body.is-viewonly #btnDel, body.is-viewonly #btnImport, body.is-viewonly #btnHide,
@@ -853,6 +876,14 @@
 
 <div class="toast" id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
 
+<div class="conflict" id="conflictBar" hidden>
+  <span><strong>⚠ Có người khác vừa sửa bảng này.</strong> Thay đổi của bạn <b>chưa được lưu</b>.</span>
+  <span class="conflict__acts">
+    <button type="button" class="btn" id="btnConflictTake" title="Lấy bản trên máy chủ về — thay đổi đang chờ của bạn sẽ mất">Xem bản mới</button>
+    <button type="button" class="btn btn--danger" id="btnConflictForce" title="Lưu đè bản của bạn lên — thay đổi của người kia sẽ mất">Ghi đè bằng bản của tôi</button>
+  </span>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -959,7 +990,10 @@
   var serverMtime = 0;
   var savePending = false;
   var saveTimer = null;
-  var filesBusy = false;      // đang tải file lên → tạm dừng đồng bộ để không ghi đè
+  var filesBusy = false;      // đang gắn file vừa tải xong vào dòng → tạm dừng đồng bộ
+  var syncPaused = false;     // dải cảnh báo xung đột đang hiện → dừng hẳn đồng bộ
+  var conflictData = null;    // bản trên máy chủ mà máy chủ trả kèm mã 409
+  var pushing = false;        // đang có một lần đẩy lên máy chủ chạy dở
 
   // ---- phân quyền (server mới là nơi chặn thật — đây chỉ là giao diện) ----
   // authProtected = máy chủ có đặt EDIT_KEY/ADMIN_KEY; role = quyền của mật khẩu đang lưu
@@ -1093,15 +1127,90 @@
   }
   function pushToServer() {
     if (!state.planId) { savePending = false; return; }
+    // Chỉ cho MỘT lần đẩy chạy tại một thời điểm. Không có khoá này thì người dùng
+    // gõ liên tục trên mạng chậm sẽ gửi lần thứ hai kèm serverMtime CŨ (lần đầu
+    // chưa trả về), máy chủ thấy lệch và trả 409 với chính thay đổi của họ — dải
+    // cảnh báo xung đột giả, và bấm gì cũng mất một phần sửa.
+    if (pushing) { save(); return; }        // hẹn lại 250ms, lúc đó đã có mtime mới
+    pushing = true;
     var payload = JSON.stringify({ rows: state.rows, people: state.people, statuses: state.statuses });
-    fetch(API + "?plan=" + encodeURIComponent(state.planId), { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: payload })
+    // ifMtime = bản mà mình đã đọc. Máy chủ chỉ ghi khi document vẫn còn đúng bản đó;
+    // khác đi thì trả 409 kèm bản mới thay vì lặng lẽ ghi đè sửa của người khác.
+    fetch(API + "?plan=" + encodeURIComponent(state.planId) + "&ifMtime=" + (serverMtime || 0),
+      { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: payload })
       .then(function (r) { return r.json(); })
       .then(function (j) {
+        pushing = false;
+        // 409 = có người khác đã lưu trong lúc mình đang sửa. Đây là lúc DUY NHẤT
+        // người dùng có đủ thông tin để quyết định, nên phải hỏi chứ không tự xử.
+        // Không gộp tự động: dữ liệu là mảng dòng có thứ tự và người dùng sửa được
+        // mọi ô, nên gộp máy sẽ sai âm thầm — tệ hơn cả lỗi đang sửa.
+        if (j && j.conflict) { showConflictBanner(j); return; }
         if (j && j.ok) { serverMtime = j.mtime || serverMtime; savePending = false; setMode("server"); }
         else if (j && j.needKey) { savePending = false; role = "view"; applyRole(); toast("Không có quyền sửa — đăng nhập rồi thử lại"); }
       })
-      .catch(function () { savePending = false; setMode("server-err"); toast("Mất kết nối máy chủ — sẽ tự lưu lại khi có mạng"); });
+      .catch(function () { pushing = false; savePending = false; setMode("server-err"); toast("Mất kết nối máy chủ — sẽ tự lưu lại khi có mạng"); });
   }
+
+  // ---- dải cảnh báo xung đột ----
+  function showConflictBanner(j) {
+    savePending = false;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+
+    // Người dùng đã bấm quay lại danh sách trong lúc chờ trả lời (nút đó đẩy nốt
+    // thay đổi rồi gọi showPlanScreen, vốn đặt planId = null). Dải cảnh báo sẽ
+    // hiện đè lên màn hình danh sách, mà hai nút của nó không còn kế hoạch nào để
+    // thao tác — "Ghi đè" sẽ im lặng không làm gì nhưng vẫn báo thành công.
+    if (!state.planId) {
+      toast("Thay đổi cuối chưa lưu được — có người khác vừa sửa kế hoạch này");
+      return;
+    }
+
+    // Kế hoạch đã bị xoá (máy chủ trả mtime 0 và data null). Cả hai lựa chọn đều
+    // sai: không có bản nào để "xem", còn "ghi đè" sẽ dùng ifMtime = 0 rơi vào
+    // nhánh upsert và LÀM SỐNG LẠI kế hoạch đã xoá với tên mặc định "Kế hoạch 1".
+    // Chỉ báo rõ rồi dừng lưu; dừng đồng bộ để nội dung đang sửa còn trên màn hình
+    // cho người dùng kịp sao chép ra.
+    if (!j.mtime && !j.data) {
+      syncPaused = true;
+      toast("Kế hoạch này đã bị xoá — thay đổi của bạn không lưu được nữa");
+      return;
+    }
+
+    syncPaused = true;                 // dừng đồng bộ để bản đang sửa không bị nuốt
+    conflictData = j;
+    var bar = document.getElementById("conflictBar");
+    if (bar) bar.hidden = false;
+  }
+  function hideConflictBanner() {
+    syncPaused = false;
+    conflictData = null;
+    var bar = document.getElementById("conflictBar");
+    if (bar) bar.hidden = true;
+  }
+  // Xem bản mới: nạp bản trên máy chủ, mất thay đổi đang chờ của mình.
+  function conflictTakeServer() {
+    var j = conflictData;
+    if (j && j.data && Array.isArray(j.data.rows)) {
+      state.rows = j.data.rows;
+      state.people = j.data.people || [];
+      if (Array.isArray(j.data.statuses)) state.statuses = j.data.statuses;
+      state.rows.forEach(normalizeRowShape); migrateStatuses(); normalizeLevels();
+    }
+    serverMtime = (j && j.mtime) || 0;
+    hideConflictBanner();
+    render();
+    toast("Đã lấy bản mới nhất từ máy chủ");
+  }
+  // Ghi đè: lưu lại với mtime của bản đang nằm trên máy chủ — lần này điều kiện khớp.
+  function conflictForceMine() {
+    serverMtime = (conflictData && conflictData.mtime) || 0;
+    hideConflictBanner();
+    save();
+    toast("Đang ghi đè bằng bản của bạn…");
+  }
+  document.getElementById("btnConflictTake").addEventListener("click", conflictTakeServer);
+  document.getElementById("btnConflictForce").addEventListener("click", conflictForceMine);
   function save() {
     if (saveTimer) clearTimeout(saveTimer);
     if (!canEdit()) return;                    // chỉ xem → không đẩy gì lên máy chủ
@@ -1119,6 +1228,7 @@
     pollStarted = true;
     setInterval(function () {
       if (storageMode !== "server" || document.hidden) return;
+      if (syncPaused) return;                         // dải cảnh báo xung đột đang hiện
       if (!state.planId) {                            // đang ở danh sách kế hoạch → làm mới danh sách
         refreshPlanList();
         return;
@@ -1294,8 +1404,9 @@
   }
 
   // ================= File đính kèm =================
-  var MAX_UPLOAD = 50 * 1024 * 1024;   // giới hạn 1 file khi lưu lên máy chủ
-  var CHUNK_SIZE = 3.5 * 1024 * 1024;  // file lớn hơn → tải theo mảnh (né giới hạn body ~4.5MB của Vercel)
+  // File tải thẳng lên Amazon S3 nên không còn vướng giới hạn body ~4.5MB của
+  // Vercel lẫn giới hạn 16MB/document của MongoDB — không cần cắt mảnh nữa.
+  var MAX_UPLOAD = 200 * 1024 * 1024;  // giới hạn 1 file khi lưu lên máy chủ
   function fmtSize(n) {
     n = Number(n) || 0;
     if (n < 1024) return n + " B";
@@ -1526,39 +1637,55 @@
       return new Promise(function (ok) { setTimeout(ok, 900); }).then(function () { return retryUp(make, tries - 1); });
     });
   }
-  // Tải hỏng giữa chừng → dọn các mảnh đã lên. Không dọn thì chúng nằm lại chiếm
-  // dung lượng vĩnh viễn mà không thuộc file nào.
-  function dropChunks(ids) {
-    if (!ids || !ids.length) return;
-    fetch("api/files?chunks=" + ids.join(","), { method: "DELETE", headers: authHeaders() }).catch(function () {});
+  // Header Content-Disposition chỉ được chứa ASCII (header HTTP không nhận UTF-8 thô),
+  // nên dùng đúng cách api/files.js đang làm cho file cũ: tên rút gọn ASCII trong
+  // filename="…", tên thật mã hoá RFC 5987 trong filename*=UTF-8''…
+  function dispositionHeader(name) {
+    var nm = String(name || "file");
+    var ascii = nm.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
+    return 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(nm);
   }
-  // file > CHUNK_SIZE → cắt thành mảnh, tải tuần tự, rồi gọi finish để máy chủ ghép
-  function uploadChunked(proc) {
-    var total = Math.ceil(proc.blob.size / CHUNK_SIZE);
-    var ids = [];
-    var p = Promise.resolve();
-    for (var i = 0; i < total; i++) (function (idx) {
-      p = p.then(function () {
-        var part = proc.blob.slice(idx * CHUNK_SIZE, Math.min((idx + 1) * CHUNK_SIZE, proc.blob.size));
-        return retryUp(function () {
-          return fetch("api/files?action=chunk", { method: "POST", headers: authHeaders({ "Content-Type": "application/octet-stream" }), body: part })
-            .then(apiJson)
-            .then(function (j) {
-              if (!j || !j.ok || !j.chunkId) throw new Error((j && j.error) || "tải mảnh thất bại");
-              return j.chunkId;
-            });
-        }, 3).then(function (cid) { ids.push(cid); });
+  // Tải 1 file lên S3: xin URL ký → PUT thẳng lên kho → báo máy chủ ghi metadata.
+  // Dùng XMLHttpRequest chứ không dùng fetch vì fetch không báo được tiến độ tải LÊN.
+  function uploadDirect(proc, onProgress) {
+    return retryUp(function () {
+      return fetch("api/files?action=sign-upload"
+          + "&name=" + encodeURIComponent(proc.name)
+          + "&type=" + encodeURIComponent(proc.type)
+          + "&size=" + proc.blob.size,
+          { method: "POST", headers: authHeaders() }).then(apiJson);
+    }, 3).then(function (s) {
+      if (!s || !s.ok || !s.uploadUrl) throw new Error((s && s.error) || "không xin được đường tải lên");
+      return new Promise(function (resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("PUT", s.uploadUrl, true);
+        // BẮT BUỘC: S3 lưu hai header này làm metadata của object, và đó là NGUỒN DUY
+        // NHẤT của tên file lúc tải xuống — thuộc tính download của thẻ <a> bị trình
+        // duyệt bỏ qua sau khi 302 sang khác origin. Bỏ hai dòng này thì file lưu ra
+        // tên key ngẫu nhiên (a1b2c3d4e5f6.dwg) và KHÔNG có đường sửa ở phía client.
+        // An toàn vì URL ký bằng signQuery chỉ ký đúng header host (đã kiểm chứng:
+        // X-Amz-SignedHeaders=host), nên header thừa không tham gia chữ ký.
+        xhr.setRequestHeader("Content-Disposition", dispositionHeader(proc.name));
+        xhr.setRequestHeader("Content-Type", proc.type || "application/octet-stream");
+        xhr.upload.onprogress = function (e) {
+          if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+        };
+        xhr.onload = function () {
+          (xhr.status >= 200 && xhr.status < 300)
+            ? resolve(s)
+            : reject(new Error("kho lưu trữ trả lỗi HTTP " + xhr.status));
+        };
+        xhr.onerror = function () { reject(new Error("mất kết nối khi tải lên")); };
+        xhr.send(proc.blob);
       });
-    })(i);
-    return p.then(function () {
+    }).then(function (s) {
+      // retryUp bọc sign và confirm nhưng KHÔNG bọc PUT — không tự thử lại 200MB.
+      // Bọc confirm chỉ an toàn vì máy chủ đã làm nó idempotent.
       return retryUp(function () {
-        return fetch("api/files?action=finish&name=" + encodeURIComponent(proc.name) +
-          "&type=" + encodeURIComponent(proc.type) + "&chunks=" + ids.join(","), { method: "POST", headers: authHeaders() })
-          .then(apiJson);
+        return fetch("api/files?action=confirm&id=" + encodeURIComponent(s.id)
+            + "&key=" + encodeURIComponent(s.key),
+            { method: "POST", headers: authHeaders() }).then(apiJson);
       }, 3);
-    }).catch(function (err) {
-      dropChunks(ids);          // trả lại dung lượng đã chiếm rồi mới báo lỗi
-      throw err;
     });
   }
   // tải xuống file chia mảnh: lấy từng mảnh rồi ghép thành Blob (né giới hạn response của Vercel)
@@ -1583,18 +1710,57 @@
     }).catch(function () { toast("Không tải được “" + (f.name || "file") + "”"); });
   }
 
+  // Truy vấn lại ô file mỗi lần thay vì giữ tham chiếu DOM. Vòng đồng bộ 4 giây vẫn
+  // chạy trong lúc PUT (xem ghi chú filesBusy bên dưới) nên ô có thể đã được render
+  // lại; tham chiếu cũ đã rời khỏi cây DOM và thanh % sẽ đứng im ở 0.
+  function uploadCell(rowId, fkey) {
+    return tbody.querySelector('.files-cell[data-id="' + rowId + '"][data-fkey="' + fkey + '"]');
+  }
+  function setUploadProgress(rowId, fkey, r) {
+    var c = uploadCell(rowId, fkey);
+    if (!c) return;
+    c.classList.add("uploading");
+    c.style.setProperty("--up", r.toFixed(3));
+    var add = c.querySelector(".file-add span");
+    if (add) add.setAttribute("data-up", String(Math.round(r * 100)));
+  }
+
   function handleFilesSelected(rowId, fkey, fileList) {
     if (!canEdit()) return;
-    var row = findRow(rowId);
-    if (!row || !fileList || !fileList.length) return;
-    if (!Array.isArray(row[fkey])) row[fkey] = [];
+    if (!findRow(rowId) || !fileList || !fileList.length) return;
     var files = Array.prototype.slice.call(fileList);
     var serverUp = SERVER_MODE && storageMode === "server";
-    filesBusy = true;
-    var cell = tbody.querySelector('.files-cell[data-id="' + rowId + '"][data-fkey="' + fkey + '"]');
-    if (cell) cell.classList.add("uploading");
-
+    setUploadProgress(rowId, fkey, 0);
     var okCount = 0;
+
+    // Gắn file vừa tải xong vào dòng rồi lưu. Cả khối này chạy đồng bộ, không await
+    // gì ở giữa, nên vòng đồng bộ không thể chen vào.
+    function attach(j) {
+      if (!j || !j.ok || !j.file) { toast((j && j.error) || "Tải lên thất bại"); return; }
+      // filesBusy CHỈ bật ở đây — từ lúc file đã nằm trên kho cho tới sau save().
+      // KHÔNG bật trước khi PUT: PUT đi thẳng sang S3, không đụng máy chủ của mình,
+      // nên không có lý do gì dừng đồng bộ. Bật sớm thì với 200MB × 3 file state.rows
+      // đứng yên hàng chục phút, rồi save() đẩy nguyên document lên và xoá sạch mọi
+      // sửa của người khác trong khoảng đó — im lặng, sau một thông báo xanh.
+      // Qua khỏi save(), cờ savePending mới là thứ chặn đồng bộ suốt 250ms chờ đẩy.
+      filesBusy = true;
+      try {
+        // KHÔNG dùng lại tham chiếu dòng bắt được trước khi PUT — đồng bộ có thể đã
+        // thay state.rows và tham chiếu cũ nay trỏ vào bản sao đã lỗi thời, file gắn
+        // vào đó sẽ biến mất sau lần đồng bộ kế tiếp.
+        var freshRow = findRow(rowId);
+        if (!freshRow) { toast("Dòng đã bị xoá trong lúc tải — file không được gắn"); return; }
+        if (!Array.isArray(freshRow[fkey])) freshRow[fkey] = [];
+        j.file.uid = uid();
+        j.file.uploadedAt = new Date().toISOString();
+        freshRow[fkey].push(j.file);
+        okCount++;
+        save();
+      } finally {
+        filesBusy = false;
+      }
+    }
+
     var chain = Promise.resolve();
     files.forEach(function (file) {
       chain = chain.then(function () {
@@ -1604,21 +1770,17 @@
               toast("“" + file.name + "” quá lớn (" + fmtSize(proc.blob.size) + ") — tối đa " + fmtSize(MAX_UPLOAD));
               return;
             }
-            var up = (proc.blob.size > CHUNK_SIZE)
-              ? uploadChunked(proc)
-              : fetch("api/files?name=" + encodeURIComponent(proc.name) + "&type=" + encodeURIComponent(proc.type),
-                  { method: "POST", headers: authHeaders({ "Content-Type": "application/octet-stream" }), body: proc.blob })
-                  .then(apiJson);
-            return up.then(function (j) {
-              if (j && j.ok && j.file) { j.file.uid = uid(); j.file.uploadedAt = new Date().toISOString(); row[fkey].push(j.file); okCount++; }
-              else { toast((j && j.error) || ("Tải lên thất bại: " + file.name)); }
-            });
+            return uploadDirect(proc, function (r) { setUploadProgress(rowId, fkey, r); }).then(attach);
           });
         } else {
-          if (file.size > 8 * 1024 * 1024) { toast("“" + file.name + "” quá lớn cho chế độ lưu cục bộ (tối đa 8MB — dùng máy chủ để được 20MB)"); return; }
+          if (file.size > 8 * 1024 * 1024) { toast("“" + file.name + "” quá lớn cho chế độ lưu cục bộ (tối đa 8MB — dùng máy chủ để được 200MB)"); return; }
           return readAsDataURL(file).then(function (dataUrl) {
-            row[fkey].push({ uid: uid(), name: file.name, size: file.size, type: file.type, dataUrl: dataUrl, uploadedAt: new Date().toISOString() });
+            var lrow = findRow(rowId);
+            if (!lrow) { toast("Dòng đã bị xoá trong lúc tải — file không được gắn"); return; }
+            if (!Array.isArray(lrow[fkey])) lrow[fkey] = [];
+            lrow[fkey].push({ uid: uid(), name: file.name, size: file.size, type: file.type, dataUrl: dataUrl, uploadedAt: new Date().toISOString() });
             okCount++;
+            save();
           });
         }
       }).catch(function (err) {
@@ -1627,8 +1789,9 @@
     });
 
     chain.then(function () {
-      filesBusy = false;
-      if (okCount) { save(); toast("Đã đính kèm " + okCount + " file"); }
+      var c = uploadCell(rowId, fkey);
+      if (c) { c.classList.remove("uploading"); c.style.removeProperty("--up"); }
+      if (okCount) toast("Đã đính kèm " + okCount + " file");
       render();
     });
   }
@@ -3160,6 +3323,7 @@
     finishInit();
   }
   function resetTableState() {
+    hideConflictBanner();          // đổi kế hoạch → cảnh báo của kế hoạch cũ hết nghĩa
     state.selected = {}; state.focusId = null; state.query = "";
     if (searchEl) searchEl.value = "";
     Object.keys(state.colFilters).forEach(function (k) { state.colFilters[k] = ""; });

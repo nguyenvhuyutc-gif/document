@@ -2,6 +2,9 @@
   "rewrites": [
     { "source": "/", "destination": "/bang-hang-muc.html" }
   ],
+  "functions": {
+    "api/*.js": { "maxDuration": 15 }
+  },
   "headers": [
     {
       "source": "/api/(.*)",

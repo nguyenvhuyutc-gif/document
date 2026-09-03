@@ -2,22 +2,19 @@
   "name": "bang-theo-doi-hang-muc",
   "version": "1.0.0",
   "private": true,
-  "description": "Bảng theo dõi hạng mục (WBS) — máy chủ tĩnh + lưu dữ liệu chung vào data.json. Không cần cài thêm gói, chỉ dùng Node.js built-in.",
-  "main": "serve.cjs",
+  "description": "Bảng theo dõi hạng mục (WBS) — chạy trên Vercel, dữ liệu bảng ở MongoDB Atlas, file đính kèm ở Amazon S3.",
   "scripts": {
-    "start": "node serve.cjs",
-    "dev": "node serve.cjs",
-    "serve": "node serve.cjs",
     "vercel-build": "echo 'No build required'",
     "deploy": "vercel deploy --prod",
     "deploy:preview": "vercel deploy",
     "vercel:login": "vercel login",
     "vercel:whoami": "vercel whoami",
     "vercel:link": "vercel link --yes",
-    "vercel:env": "vercel env pull .env",
+    "vercel:env": "vercel env pull .env --environment production",
     "vercel:logs": "vercel logs"
   },
   "dependencies": {
+    "aws4fetch": "1.0.20",
     "mongodb": "^5.8.0"
   },
   "devDependencies": {

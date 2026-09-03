@@ -151,13 +151,44 @@ module.exports = async (req, res) => {
       if (typeof payload !== "object" || payload === null) {
         return sendJson(res, 400, { ok: false, error: "Dữ liệu phải là JSON" });
       }
-      const updatedAt = Date.now();
-      await collection.updateOne(
-        { _id: planId },
-        { $set: { data: payload, updatedAt }, $setOnInsert: { name: "Kế hoạch 1", createdAt: updatedAt } },
-        { upsert: true }
+      const ifMtime = Number(q.get("ifMtime") || 0);
+      let updatedAt = Date.now();
+      // mtime phải TĂNG THẬT SỰ sau mỗi lần ghi. Hai lần ghi rơi vào cùng một
+      // mili-giây sẽ sinh cùng một updatedAt, và điều kiện ifMtime của người lưu
+      // kế tiếp sẽ khớp nhầm — ghi đè im lặng, đúng cái lỗi đang sửa. Hiếm trong
+      // thực tế (save() có debounce 250ms) nhưng rẻ để chặn hẳn.
+      if (updatedAt <= ifMtime) updatedAt = ifMtime + 1;
+
+      // ifMtime = 0 → giữ nguyên hành vi cũ (upsert). Cần cho hai trường hợp:
+      // kế hoạch mới chưa có document, và các tab đang mở bản HTML cũ trong cache
+      // chưa biết gửi tham số này.
+      if (!ifMtime) {
+        await collection.updateOne(
+          { _id: planId },
+          { $set: { data: payload, updatedAt }, $setOnInsert: { name: "Kế hoạch 1", createdAt: updatedAt } },
+          { upsert: true }
+        );
+        return sendJson(res, 200, { ok: true, mtime: updatedAt });
+      }
+
+      // Có ifMtime → chỉ ghi khi document trên máy chủ vẫn đúng bản mà client đã đọc.
+      // Không có điều kiện này thì người lưu sau luôn thắng và mọi thay đổi của người
+      // lưu trước biến mất không dấu vết: không cảnh báo, không nhật ký, không hoàn tác.
+      const r = await collection.updateOne(
+        { _id: planId, updatedAt: ifMtime },
+        { $set: { data: payload, updatedAt } }
       );
-      return sendJson(res, 200, { ok: true, mtime: updatedAt });
+      if (r.matchedCount === 1) return sendJson(res, 200, { ok: true, mtime: updatedAt });
+
+      // Không khớp → có người khác đã lưu. KHÔNG ghi đè. Trả bản trên máy chủ về
+      // để client có đủ thứ cần cho việc quyết định (xem bản mới, hay ghi đè).
+      const cur = await collection.findOne({ _id: planId });
+      return sendJson(res, 409, {
+        ok: false,
+        conflict: true,
+        mtime: cur ? (cur.updatedAt || 0) : 0,
+        data: cur ? (cur.data || null) : null,
+      });
     }
 
     sendJson(res, 405, { ok: false, error: "Method Not Allowed" });

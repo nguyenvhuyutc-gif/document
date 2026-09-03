@@ -1,6 +1,7 @@
 # Dự án: Bảng theo dõi hạng mục (BIM)
 
-Ứng dụng HTML tĩnh + serverless functions, chạy trên Vercel, lưu dữ liệu ở MongoDB Atlas.
+Ứng dụng HTML tĩnh + serverless functions, chạy trên Vercel. Dữ liệu bảng ở
+MongoDB Atlas; **file đính kèm ở Amazon S3** (từ 09/2026, tối đa 200MB/file).
 
 - **Production:** https://bim-ruddy.vercel.app
 - **Vercel project:** `bim` thuộc tài khoản `nguyenvhuyutc-9517`
@@ -14,13 +15,16 @@ quyền deploy, nhưng dùng chung MongoDB nên dữ liệu hai bên giống nha
 |---|---|
 | `bang-hang-muc.html` | Toàn bộ giao diện — trang gốc `/` rewrite về đây |
 | `api/data.js` | Serverless function đọc/ghi dữ liệu bảng vào MongoDB |
-| `api/files.js` | Serverless function quản lý file đính kèm |
-| `serve.cjs` | Server LAN chạy **local**, không deploy (loại trong `.vercelignore`) |
-| `data.json` | Dữ liệu **local** dùng với `serve.cjs`, không deploy |
-| `vercel.json` | Rewrite trang gốc + CORS header cho `/api/*` |
+| `api/files.js` | Ký presigned URL cho S3 + ghi metadata file vào MongoDB |
+| `scripts/kiem-tra-cau-hinh.mjs` | Kiểm `.env` + MongoDB + S3 ở máy — an toàn, chạy lúc nào cũng được |
+| `scripts/don-file-mo-coi.mjs` | Dọn file mồ côi trên S3 — chạy tay, xoá được dữ liệu thật |
+| `vercel.json` | Rewrite trang gốc + CORS + `functions.maxDuration` |
+| `serve.cjs`, `start-server.bat`, `data.json` | **Tư liệu, KHÔNG chạy được nữa** — xem § Bản LAN |
 
-Trên Vercel dữ liệu nằm ở MongoDB; `serve.cjs` + `data.json` chỉ phục vụ chạy
-máy trong mạng LAN. Đừng lẫn hai đường này.
+**File đính kèm:** client PUT thẳng lên S3, function chỉ ký URL. MongoDB chỉ giữ
+metadata (`{key, status, size}`). File tải lên **trước 09/2026** vẫn nằm trong
+MongoDB dạng `data`/`chunks` và vẫn đọc được — hai đường chạy song song, không
+migrate. Chi tiết + ba cái bẫy dễ sập: [docs/luu-file-s3.md](docs/luu-file-s3.md).
 
 ## Môi trường
 
@@ -38,10 +42,9 @@ Bash tool không có `node`/`npm`/`npx` — đừng dùng Bash cho các lệnh n
 
 | Lệnh | Tác dụng |
 |---|---|
-| `npm start` | Chạy server LAN local (cổng 8787) |
 | `npm run deploy` | Deploy production lên Vercel |
 | `npm run deploy:preview` | Deploy bản thử, link riêng |
-| `npm run vercel:env` | Kéo biến môi trường từ Vercel về `.env` |
+| `npm run vercel:env` | Kéo biến môi trường **production** từ Vercel về `.env` |
 | `npm run vercel:logs` | Xem log runtime của function |
 | `npm run vercel:login` | Đăng nhập lại Vercel CLI |
 
@@ -53,18 +56,18 @@ cách xác minh và bảng xử lý sự cố.
 
 ## Phân quyền
 
-API dùng 2 mật khẩu đặt qua biến môi trường (trên Vercel cho bản web, hoặc env
-khi chạy `serve.cjs` cho bản LAN):
+API dùng 2 mật khẩu đặt qua biến môi trường trên Vercel:
 
 - `EDIT_KEY` — quyền sửa: ghi dữ liệu bảng, tạo/đổi tên kế hoạch, tải file lên.
 - `ADMIN_KEY` — quyền quản trị: như trên, thêm xoá kế hoạch và xoá file.
 - Xem/tải file xuống (GET) luôn tự do. **Không đặt cả hai biến → không khoá gì**
-  (tương thích cũ, và là mặc định của chế độ LAN).
+  (tương thích cũ).
 
 Client gửi mật khẩu qua header `x-edit-key` (lưu localStorage, nhập ở nút đăng
 nhập trên giao diện). Endpoint `GET /api/data?whoami=1` trả `{role, protected}`
-để giao diện ẩn/hiện nút. Logic kiểm tra nằm ở `api/data.js`, `api/files.js`
-và `serve.cjs` (3 bản giống nhau — sửa một chỗ thì sửa cả ba).
+để giao diện ẩn/hiện nút. Logic kiểm tra nằm ở `api/data.js` và `api/files.js`
+— **hai bản giống nhau, sửa một chỗ thì sửa cả hai**. `serve.cjs` đứng ngoài, đã
+ngừng dùng.
 
 Lưu ý: site cũ `bim-wheat.vercel.app` chạy code cũ trên cùng MongoDB nên không
 bị khoá theo — muốn chặn triệt để phải đổi mật khẩu MongoDB Atlas.
@@ -80,3 +83,35 @@ bị khoá theo — muốn chặn triệt để phải đổi mật khẩu Mongo
   ngoài repo. Không ghi token vào bất kỳ file nào trong project.
 - Project có kết nối GitHub repo `nguyenvhuyutc-gif/document` → push lên repo đó
   cũng kích hoạt deploy tự động.
+- 4 biến S3 (`S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
+  `S3_BUCKET`) đặt trên Vercel, tách riêng Production và Preview. Preview dùng
+  bucket riêng và `MONGODB_DB=bim_preview` để kiểm thử không đụng dữ liệu thật.
+  Access Key ID **có** nằm trong mọi URL đã ký — đó là bản chất SigV4, không
+  phải rò rỉ; chỉ `S3_SECRET_ACCESS_KEY` mới phải giữ kín.
+- URL S3 dùng **path-style** (`https://s3.<vùng>.amazonaws.com/<bucket>/<key>`),
+  không phải virtual-hosted — tên bucket có dấu chấm nên chứng chỉ TLS
+  `*.s3.<vùng>.amazonaws.com` không khớp. **Đừng "sửa" thành virtual-hosted.**
+- `.vercelignore` chặn `*.md`, `docs`, `plans`, `scripts`, `scratch` — **đừng gỡ**.
+  Vercel phục vụ mọi file tĩnh, nên bỏ ra là `https://…/CLAUDE.md` mở được công khai.
+
+## Đồng bộ dữ liệu bảng
+
+`POST /api/data?plan=<id>&ifMtime=<mtime>` chỉ ghi khi document trên máy chủ vẫn
+đúng bản client đã đọc. Không khớp → **409 kèm `conflict: true`, `mtime` và `data`
+của bản trên máy chủ**. 409 ở đây nghĩa là *xung đột*, không phải lỗi — giao diện
+hiện dải cảnh báo cho người dùng chọn "Xem bản mới" hay "Ghi đè bằng bản của tôi",
+và dừng vòng đồng bộ (`syncPaused`) trong lúc đó.
+
+`ifMtime = 0` hoặc thiếu → giữ hành vi cũ (upsert, last-write-wins). Cần cho kế
+hoạch mới chưa có document, và cho tab đang mở bản HTML cũ trong cache.
+
+## Bản LAN (`serve.cjs`) — đã ngừng
+
+Giữ file làm tư liệu, đã gỡ script `npm start` / `dev` / `serve`. Chỉ có **một**
+`bang-hang-muc.html` dùng chung, mà giao diện nay gọi `?action=sign-upload` —
+`serve.cjs` không có route đó nên **mọi lần tải file lên sẽ báo "File rỗng"**.
+Đừng "sửa lỗi" đó bằng cách đổi giao diện; đọc § Muốn dựng lại bản LAN trong
+[docs/luu-file-s3.md](docs/luu-file-s3.md).
+
+## Responses / Results / Questions / Suggests
+Write all results, questions, and suggestions in Vietnamese with proper diacritics.

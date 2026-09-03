@@ -10,5 +10,8 @@ data-files/
 
 .claude/settings.local.json
 
+# Thư mục nháp — nơi hay dán tạm khoá API khi thử nghiệm, không bao giờ commit
+scratch/
+
 .env*
 !.env.example

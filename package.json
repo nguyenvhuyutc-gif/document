@@ -14,10 +14,11 @@
     "vercel:login": "vercel login",
     "vercel:whoami": "vercel whoami",
     "vercel:link": "vercel link --yes",
-    "vercel:env": "vercel env pull .env",
+    "vercel:env": "vercel env pull .env --environment production",
     "vercel:logs": "vercel logs"
   },
   "dependencies": {
+    "aws4fetch": "1.0.20",
     "mongodb": "^5.8.0"
   },
   "devDependencies": {

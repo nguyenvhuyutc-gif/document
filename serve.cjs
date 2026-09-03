@@ -29,6 +29,37 @@ function sendJson(res, code, obj) {
   res.end(b);
 }
 
+// ---- phân quyền (giống bản Vercel): EDIT_KEY = sửa/tải file, ADMIN_KEY = thêm quyền xoá ----
+// Chạy LAN mặc định không đặt khoá → mọi người đều là quản trị (như trước giờ).
+// Muốn khoá:  set EDIT_KEY=abc && set ADMIN_KEY=xyz && node serve.cjs
+const editKey = process.env.EDIT_KEY || "";
+const adminKey = process.env.ADMIN_KEY || "";
+function safeEqual(a, b) {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+function getRole(req) {
+  if (!adminKey && !editKey) return "admin";
+  var key = String(req.headers["x-edit-key"] || "");
+  if (adminKey && key && safeEqual(key, adminKey)) return "admin";
+  if (editKey && key && safeEqual(key, editKey)) return "edit";
+  return "view";
+}
+// Trả 401 nếu request ghi không đủ quyền; xoá cần admin, còn lại cần edit
+function denyIfNoRight(req, res, needAdmin) {
+  var role = getRole(req);
+  if (needAdmin && role !== "admin") {
+    sendJson(res, 401, { ok: false, needKey: true, error: "Cần mật khẩu quản trị để xoá" });
+    return true;
+  }
+  if (role !== "admin" && role !== "edit") {
+    sendJson(res, 401, { ok: false, needKey: true, error: "Cần mật khẩu quyền sửa" });
+    return true;
+  }
+  return false;
+}
+
 const server = http.createServer(function (req, res) {
   var rawUrl = req.url || "/";
   var qs = rawUrl.indexOf("?") >= 0 ? rawUrl.slice(rawUrl.indexOf("?") + 1) : "";
@@ -44,6 +75,10 @@ const server = http.createServer(function (req, res) {
   // Giao thức giống bản Vercel (api/files.js): file nhỏ = 1 POST;
   // file lớn (≤50MB) = POST ?action=chunk từng mảnh rồi POST ?action=finish ghép lại.
   if (url === "/api/files") {
+    // Tải xuống (GET) tự do; tải lên (POST) cần quyền sửa; xoá (DELETE) cần quản trị
+    // dọn mảnh rời của lần tải hỏng chỉ cần quyền sửa — không đụng file hoàn chỉnh nào
+    if ((req.method === "POST" || req.method === "DELETE") &&
+        denyIfNoRight(req, res, req.method === "DELETE" && !query.chunks)) return;
     var readBody = function (limit, cb) {
       var chunks = [], size = 0, tooBig = false;
       req.on("data", function (c) { size += c.length; if (size > limit) { tooBig = true; req.destroy(); } else chunks.push(c); });
@@ -149,6 +184,17 @@ const server = http.createServer(function (req, res) {
       });
       return;
     }
+    // ---- Dọn các mảnh rời còn sót lại của một lần tải hỏng giữa chừng ----
+    if (req.method === "DELETE" && query.chunks) {
+      var loose = String(query.chunks).split(",").map(safeId).filter(Boolean);
+      var gone = 0;
+      loose.forEach(function (cid) {
+        // chỉ xoá mảnh trần: file hoàn chỉnh luôn kèm một file .json meta bên cạnh
+        if (fs.existsSync(path.join(filesDir, cid + ".json"))) return;
+        try { fs.unlinkSync(path.join(filesDir, cid)); gone++; } catch (e) {}
+      });
+      return sendJson(res, 200, { ok: true, removed: gone });
+    }
     if (req.method === "DELETE") {
       var did = safeId(query.id);
       if (did) {
@@ -170,6 +216,12 @@ const server = http.createServer(function (req, res) {
 
   // ---- API dữ liệu — NHIỀU KẾ HOẠCH (data.json = { __plans: { id: {name,data,createdAt,updatedAt} } }) ----
   if (url === "/api/data") {
+    // kiểm tra quyền của mật khẩu gửi kèm
+    if (req.method === "GET" && query.whoami) {
+      return sendJson(res, 200, { ok: true, role: getRole(req), protected: !!(editKey || adminKey) });
+    }
+    // Đọc (GET) tự do; ghi cần quyền sửa; xoá kế hoạch cần quản trị
+    if ((req.method === "POST" || req.method === "DELETE") && denyIfNoRight(req, res, query.action === "delete")) return;
     var readStore = function (cb) {
       fs.readFile(dataFile, "utf8", function (err, txt) {
         var store = { __plans: {} };

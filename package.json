@@ -12,6 +12,7 @@
     "deploy": "vercel deploy --prod",
     "deploy:preview": "vercel deploy",
     "vercel:login": "vercel login",
+    "vercel:whoami": "vercel whoami",
     "vercel:link": "vercel link --yes",
     "vercel:env": "vercel env pull .env",
     "vercel:logs": "vercel logs"

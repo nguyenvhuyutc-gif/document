@@ -171,7 +171,7 @@
   }
   /* bounded height → table area becomes the scroll container, so the sticky header stays fixed */
   .table-wrap { overflow: auto; max-height: calc(100vh - 148px); min-height: 180px; }
-  table { width: 100%; min-width: 1300px; border-collapse: separate; border-spacing: 0; }
+  table { width: 100%; min-width: 1820px; border-collapse: separate; border-spacing: 0; }
 
   thead th {
     position: sticky; top: 0; z-index: 3; background: var(--surface-3);
@@ -196,17 +196,17 @@
   .colfilter:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 2px var(--accent-weak); }
   .colfilter.active { border-color: var(--accent-line); background: var(--surface); }
 
-  .col-check { width: 40px; text-align: center; padding-left: 0; padding-right: 0; vertical-align: middle; }
-  .col-stt   { width: 88px; text-align: center; }
+  .col-check { text-align: center; padding-left: 0; padding-right: 0; vertical-align: middle; }
+  .col-stt   { text-align: center; }
   .col-stt .th-label { text-align: center; }
   .col-stt .colfilter { text-align: center; font-family: var(--ff-mono); }
   /* bề rộng cột cố định — cột không nhảy khi gõ */
-  thead th:nth-child(3) { width: 26%; }
-  thead th:nth-child(4) { width: 22%; }
-  thead th:nth-child(5) { width: 16%; }
-  thead th:nth-child(6) { width: 112px; }
-  thead th:nth-child(7) { width: 150px; }
-  th.col-files { width: 140px; }
+
+
+
+
+
+
 
   tbody tr { transition: background .12s; }
   tbody tr:hover { background: var(--row-hover); }
@@ -322,11 +322,36 @@
   .chip .x:hover { opacity: 1; }
 
   /* ---------- File đang trình / File đã duyệt / Hồ sơ chấp thuận ---------- */
-  th.col-files { width: 140px; }
+
   .td-files { vertical-align: top; }
+
+
+  .td-time { vertical-align: top; }
+  /* cùng padding-top + gap + chiều cao dòng với .files-list → mốc thời gian nằm ngang hàng file tương ứng */
+  .time-cell { padding: 5px 6px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .time-item {
+    display: flex; align-items: center; height: 24px; padding: 0 2px;
+    font-family: var(--ff-mono); font-size: .72rem; color: var(--text-dim); white-space: nowrap;
+  }
+  .time-item.is-empty { opacity: .5; }
+  /* ---------- Ghi chú: mỗi file một dòng ---------- */
+  /* cùng padding-top, gap và chiều cao dòng với .files-cell để thẳng hàng từng file */
+  .note-cell { padding: 5px 8px; display: flex; flex-direction: column; gap: 5px; align-items: stretch; }
+  .note-list { display: flex; flex-direction: column; gap: 4px; }
+  .cell.note-line {
+    min-height: 24px; height: 24px; padding: 2px 7px; border-radius: 5px;
+    font-size: .78rem; line-height: 1.45;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* đang gõ → bung ra cho thấy hết chữ, rời ô lại thu về đúng một dòng */
+  .cell.note-line:focus {
+    height: auto; white-space: pre-wrap; overflow: visible; text-overflow: clip;
+    position: relative; z-index: 2;
+  }
+  .cell.note-line--row { color: var(--text-mid); }
   .files-cell { padding: 5px 8px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
   .files-list { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-  .file-item { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; }
+  .file-item { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; height: 24px; }
   .file-link {
     display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%;
     padding: 3px 8px; border-radius: 5px; background: var(--accent-weak); border: 1px solid var(--accent-line);
@@ -440,6 +465,85 @@
     background: var(--accent); color: #fff; font-family: var(--ff-sans); font-size: .85rem; font-weight: 600;
   }
   .modal-done:hover { filter: brightness(1.06); }
+
+  /* ---------- Hộp xác nhận xoá dòng ---------- */
+  .modal--sm { width: 440px; }
+  .del-lead { margin: 0 0 8px; font-size: .86rem; color: var(--text-hi); }
+  .del-list {
+    margin: 0; padding-left: 18px; max-height: 190px; overflow-y: auto;
+    font-size: .8rem; color: var(--text); line-height: 1.55;
+  }
+  .del-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .del-list .del-more { list-style: none; margin-left: -18px; color: var(--text-dim); font-style: italic; }
+  .del-files { margin: 10px 0 0; font-size: .78rem; color: var(--danger); }
+  .del-actions { display: flex; gap: 8px; flex: none; }
+  .modal-cancel {
+    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer;
+    background: var(--surface); color: var(--text); font-family: var(--ff-sans); font-size: .85rem; font-weight: 600;
+  }
+  .modal-cancel:hover { background: var(--surface-2); }
+  .modal-done--danger { background: var(--danger); }
+
+  /* ---------- Co giãn & ẩn/hiện cột, dòng ---------- */
+  /* tay kéo bề rộng cột: nằm đè lên viền phải của ô tiêu đề */
+  .col-grip {
+    position: absolute; top: 0; right: 0; width: 8px; height: 100%;
+    cursor: col-resize; z-index: 5; background: transparent; border: none; padding: 0;
+  }
+  .col-grip::after {
+    content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 2px;
+    border-radius: 1px; background: transparent; transition: background .12s;
+  }
+  .col-grip:hover::after, .col-grip.is-dragging::after { background: var(--accent); }
+  /* tay kéo độ cao dòng: nằm đè lên viền dưới của ô STT */
+  .row-grip {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 8px;
+    cursor: row-resize; z-index: 4; background: transparent; border: none; padding: 0;
+  }
+  .row-grip::after {
+    content: ""; position: absolute; left: 6px; right: 6px; top: 3px; height: 2px;
+    border-radius: 1px; background: transparent; transition: background .12s;
+  }
+  .row-grip:hover::after, .row-grip.is-dragging::after { background: var(--accent); }
+  body.is-resizing { user-select: none; cursor: col-resize; }
+  body.is-resizing-row { user-select: none; cursor: row-resize; }
+  /* ô bị kéo thấp hơn nội dung thì cắt bớt thay vì phá vỡ chiều cao dòng */
+  tbody tr[style*="height"] td { overflow: hidden; }
+
+  /* bảng chọn hiển thị */
+  .view-pop {
+    position: fixed; z-index: 240; width: 262px; max-height: 78vh; overflow-y: auto;
+    padding: 10px; border-radius: 9px; background: var(--surface);
+    border: 1px solid var(--border); box-shadow: var(--shadow); display: none;
+  }
+  .view-pop.show { display: block; }
+  .view-sec { font-size: .66rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--text-dim); margin: 4px 2px 6px; }
+  .view-sec + .view-sec, .view-row + .view-sec, .view-list + .view-sec { margin-top: 12px; }
+  .dens-group { display: flex; gap: 4px; }
+  .dens-btn {
+    flex: 1; padding: 6px 0; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-family: var(--ff-sans); font-size: .76rem; font-weight: 600;
+  }
+  .dens-btn:hover { background: var(--surface-2); }
+  .dens-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .view-list { display: flex; flex-direction: column; gap: 1px; }
+  .view-item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;
+    font-size: .8rem; color: var(--text-hi); cursor: pointer;
+  }
+  .view-item:hover { background: var(--surface-2); }
+  .view-item input { flex: none; cursor: pointer; }
+  .view-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .view-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px; }
+  .view-note { font-size: .76rem; color: var(--text-dim); }
+  .view-link {
+    border: none; background: none; cursor: pointer; padding: 4px 6px; border-radius: 6px;
+    color: var(--accent); font-family: var(--ff-sans); font-size: .76rem; font-weight: 600;
+  }
+  .view-link:hover { background: var(--accent-weak); }
+  .view-link[disabled] { color: var(--text-dim); cursor: default; background: none; }
 
   /* ---------- Bảng màu ---------- */
   .palette-pop {
@@ -579,6 +683,19 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: none; }
 
+  /* ---- phân quyền: chỉ xem → ẩn mọi nút sửa và mọi tuỳ chọn hiển thị;
+         không phải quản trị → ẩn nút xoá ---- */
+  body.is-viewonly #btnAdd, body.is-viewonly #btnDel, body.is-viewonly #btnImport, body.is-viewonly #btnHide,
+  body.is-viewonly #btnIndent, body.is-viewonly #btnOutdent, body.is-viewonly #btnAddEmpty,
+  body.is-viewonly #btnNewPlan, body.is-viewonly .plan-card__actions,
+  body.is-viewonly .file-add, body.is-viewonly .file-del,
+  body.is-viewonly .row-add, body.is-viewonly .col-check input,
+  body.is-viewonly #btnView, body.is-viewonly .col-grip, body.is-viewonly .row-grip,
+  body.is-viewonly .view-pop,
+  body.is-viewonly .chip .x { display: none !important; }
+  body.no-admin .plan-delete, body.no-admin .file-del { display: none !important; }
+  .auth-btn[hidden] { display: none !important; }
+
   @media (max-width: 560px) {
     .app__head { align-items: stretch; }
     .toolbar { width: 100%; }
@@ -596,6 +713,7 @@
       <p class="sub">Mỗi kế hoạch là một bảng theo dõi hạng mục riêng · <span id="planMode" class="mode-pill warn">● đang tải…</span></p>
     </div>
     <div class="spacer"></div>
+    <button id="btnAuthPlan" class="btn btn--ghost auth-btn" type="button" hidden></button>
     <button id="btnNewPlan" class="btn btn--primary" type="button">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
       <span class="label">Tạo kế hoạch</span>
@@ -631,6 +749,10 @@
       <button id="btnIndent" class="btn btn--icon btn--ghost" title="Tăng cấp WBS — chọn/tick dòng rồi bấm (phím tắt: Ctrl+] )" aria-label="Tăng cấp">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 8h10M11 12h10M11 16h10M3 8l4 4-4 4"/></svg>
       </button>
+      <button id="btnView" class="btn btn--ghost" title="Độ cao dòng · ẩn/hiện cột · hiện lại dòng đã ẩn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="var(--surface)"/><circle cx="15" cy="12" r="2" fill="var(--surface)"/><circle cx="8" cy="18" r="2" fill="var(--surface)"/></svg>
+        <span class="label">Hiển thị</span>
+      </button>
       <div class="tool-sep"></div>
       <button id="btnImport" class="btn btn--ghost" title="Nhập dữ liệu từ file CSV — dùng STT (mã WBS) làm khóa">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4M4 21h16"/></svg>
@@ -645,10 +767,15 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         <span class="label">Thêm dòng</span>
       </button>
+      <button id="btnHide" class="btn btn--ghost" title="Ẩn các dòng đã chọn (kèm dòng con) — không xoá, hiện lại được" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.9 9.9 0 0 1 12 5c5 0 9 4.5 9 7a12 12 0 0 1-2.3 3.3M6.6 6.6C4.2 8.1 3 10.3 3 12c0 2.5 4 7 9 7 1.7 0 3.2-.5 4.5-1.2"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+        <span class="label">Ẩn</span>
+      </button>
       <button id="btnDel" class="btn btn--danger" title="Xóa các dòng đã chọn (kèm dòng con)" disabled>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>
         <span class="label">Xóa</span><span class="pill" id="selPill">0</span>
       </button>
+      <button id="btnAuthApp" class="btn btn--ghost auth-btn" type="button" hidden></button>
     </div>
   </header>
 
@@ -685,11 +812,24 @@
             <th class="col-files">
               <div class="th-label">File đang trình</div>
             </th>
+            <th class="col-time">
+              <div class="th-label">Thời gian</div>
+            </th>
+            <th class="col-note">
+              <div class="th-label">Ghi chú</div>
+              <input class="colfilter" data-col="ghiChu" type="text" placeholder="Lọc cột…" aria-label="Lọc theo Ghi chú">
+            </th>
             <th class="col-files">
               <div class="th-label">File đã duyệt</div>
             </th>
+            <th class="col-time">
+              <div class="th-label">Thời gian</div>
+            </th>
             <th class="col-files">
               <div class="th-label">Hồ sơ chấp thuận</div>
+            </th>
+            <th class="col-time">
+              <div class="th-label">Thời gian</div>
             </th>
           </tr>
         </thead>
@@ -726,7 +866,7 @@
     { key: "tienDo",    ph: "vd: 01/08 – 20/08/2026",  type: "rich" },
     { key: "tinhTrang", ph: "Chọn tình trạng…",         type: "status" }
   ];
-  var HEADERS = ["STT", "Hạng mục", "Thông tin chi tiết", "Người làm", "Tiến độ kế hoạch", "Tình trạng hồ sơ", "File đang trình", "File đã duyệt", "Hồ sơ chấp thuận"];
+  var HEADERS = ["STT", "Hạng mục", "Thông tin chi tiết", "Người làm", "Tiến độ kế hoạch", "Tình trạng hồ sơ", "File đang trình", "Thời gian trình", "Ghi chú", "File đã duyệt", "Thời gian duyệt", "Hồ sơ chấp thuận", "Thời gian chấp thuận"];
 
   function uid() { return "r" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36); }
 
@@ -783,13 +923,13 @@
 
   function emptyRow(level) {
     return { id: uid(), level: level || 0, collapsed: false,
-      hangMuc: "", chiTiet: "", nguoiLam: [], tienDo: "", tinhTrang: "", files: [], filesDuyet: [], filesChapThuan: [] };
+      hangMuc: "", chiTiet: "", nguoiLam: [], tienDo: "", tinhTrang: "", ghiChu: "", hidden: false, files: [], filesDuyet: [], filesChapThuan: [] };
   }
   function seed() {
     var people = ["Ban chỉ huy CT", "Tổ khoan cọc", "Nguyễn Văn A", "Trần Thị B", "Lê Văn C", "Phạm Văn D"];
     function r(level, a, b, c, d, e) {
       return { id: uid(), level: level, collapsed: false,
-        hangMuc: textToHtml(a), chiTiet: textToHtml(b), nguoiLam: c, tienDo: textToHtml(d), tinhTrang: textToHtml(e), files: [], filesDuyet: [], filesChapThuan: [] };
+        hangMuc: textToHtml(a), chiTiet: textToHtml(b), nguoiLam: c, tienDo: textToHtml(d), tinhTrang: textToHtml(e), ghiChu: "", files: [], filesDuyet: [], filesChapThuan: [] };
     }
     var rows = [
       r(0, "Phần ngầm", "Cọc + đài móng toàn công trình", ["Ban chỉ huy CT"], "01/08 – 30/09/2026", "Đang thi công"),
@@ -807,7 +947,7 @@
     planId: null, planName: "",          // kế hoạch đang mở
     focusId: null, focusKey: "hangMuc", comboRowId: null, statusRowId: null,
     selected: {},   // id → true: tick chọn dòng, giữ qua các lần render/đồng bộ
-    colFilters: { stt: "", hangMuc: "", chiTiet: "", nguoiLam: "", tienDo: "", tinhTrang: "" }
+    colFilters: { stt: "", hangMuc: "", chiTiet: "", nguoiLam: "", tienDo: "", tinhTrang: "", ghiChu: "" }
   };
 
   // ---- persistence ----
@@ -820,6 +960,72 @@
   var savePending = false;
   var saveTimer = null;
   var filesBusy = false;      // đang tải file lên → tạm dừng đồng bộ để không ghi đè
+
+  // ---- phân quyền (server mới là nơi chặn thật — đây chỉ là giao diện) ----
+  // authProtected = máy chủ có đặt EDIT_KEY/ADMIN_KEY; role = quyền của mật khẩu đang lưu
+  var AUTH_KEY_STORE = "vci_bhm_edit_key";
+  var role = "admin";          // "view" | "edit" | "admin"
+  var authProtected = false;
+  function storedKey() { try { return localStorage.getItem(AUTH_KEY_STORE) || ""; } catch (e) { return ""; } }
+  function authHeaders(extra) {
+    var h = extra || {};
+    var k = storedKey();
+    if (k) h["x-edit-key"] = k;
+    return h;
+  }
+  function authGated() { return storageMode === "server" && authProtected; }
+  function canEdit() { return !authGated() || role === "edit" || role === "admin"; }
+  function canAdmin() { return !authGated() || role === "admin"; }
+  function applyRole() {
+    // đổi quyền → dựng lại bố cục: chỉ xem luôn thấy bảng mặc định (xem ghi chú ở applyView)
+    document.body.classList.toggle("is-viewonly", !canEdit());
+    document.body.classList.toggle("no-admin", !canAdmin());
+    if (viewStyle) { closeViewPop(); applyView(); if (state.rows.length) render(); }
+    updateAuthButtons();
+  }
+  function updateAuthButtons() {
+    ["btnAuthPlan", "btnAuthApp"].forEach(function (bid) {
+      var b = document.getElementById(bid);
+      if (!b) return;
+      if (!authGated()) { b.hidden = true; return; }
+      b.hidden = false;
+      if (!canEdit()) { b.textContent = "🔒 Chỉ xem — đăng nhập để sửa"; b.title = "Nhập mật khẩu để được sửa"; }
+      else if (canAdmin()) { b.textContent = "★ Quản trị · thoát"; b.title = "Đang có toàn quyền — bấm để thoát"; }
+      else { b.textContent = "✎ Quyền sửa · thoát"; b.title = "Đang có quyền sửa — bấm để thoát"; }
+    });
+  }
+  function verifyKey(k) {
+    fetch(API + "?whoami=1", { headers: { "x-edit-key": k } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok && (j.role === "edit" || j.role === "admin")) {
+          try { localStorage.setItem(AUTH_KEY_STORE, k); } catch (e) {}
+          role = j.role;
+          applyRole();
+          if (state.planId) render();
+          toast(j.role === "admin" ? "Đã đăng nhập quyền quản trị" : "Đã đăng nhập quyền sửa");
+        } else {
+          toast("Mật khẩu không đúng");
+        }
+      })
+      .catch(function () { toast("Không kiểm tra được mật khẩu — thử lại"); });
+  }
+  function authClick() {
+    if (!canEdit()) {
+      var k = prompt("Nhập mật khẩu quyền sửa (hoặc mật khẩu quản trị):");
+      if (k == null) return;
+      k = k.trim();
+      if (k) verifyKey(k);
+    } else if (confirm("Thoát quyền " + (canAdmin() ? "quản trị" : "sửa") + " trên máy này, chuyển về chế độ chỉ xem?")) {
+      try { localStorage.removeItem(AUTH_KEY_STORE); } catch (e) {}
+      role = "view";
+      applyRole();
+      if (state.planId) render();
+      toast("Đã chuyển về chế độ chỉ xem");
+    }
+  }
+  document.getElementById("btnAuthPlan").addEventListener("click", authClick);
+  document.getElementById("btnAuthApp").addEventListener("click", authClick);
 
   function setMode(kind) {
     var el = document.getElementById("storageMode");
@@ -888,13 +1094,17 @@
   function pushToServer() {
     if (!state.planId) { savePending = false; return; }
     var payload = JSON.stringify({ rows: state.rows, people: state.people, statuses: state.statuses });
-    fetch(API + "?plan=" + encodeURIComponent(state.planId), { method: "POST", headers: { "Content-Type": "application/json" }, body: payload })
+    fetch(API + "?plan=" + encodeURIComponent(state.planId), { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: payload })
       .then(function (r) { return r.json(); })
-      .then(function (j) { if (j && j.ok) { serverMtime = j.mtime || serverMtime; savePending = false; setMode("server"); } })
+      .then(function (j) {
+        if (j && j.ok) { serverMtime = j.mtime || serverMtime; savePending = false; setMode("server"); }
+        else if (j && j.needKey) { savePending = false; role = "view"; applyRole(); toast("Không có quyền sửa — đăng nhập rồi thử lại"); }
+      })
       .catch(function () { savePending = false; setMode("server-err"); toast("Mất kết nối máy chủ — sẽ tự lưu lại khi có mạng"); });
   }
   function save() {
     if (saveTimer) clearTimeout(saveTimer);
+    if (!canEdit()) return;                    // chỉ xem → không đẩy gì lên máy chủ
     if (storageMode === "server") {
       savePending = true;
       saveTimer = setTimeout(pushToServer, 250);
@@ -1032,7 +1242,7 @@
   function makeCell(row, field) {
     var cell = document.createElement("div");
     cell.className = "cell";
-    cell.setAttribute("contenteditable", "true");
+    cell.setAttribute("contenteditable", canEdit() ? "true" : "false");
     cell.setAttribute("data-id", row.id);
     cell.setAttribute("data-key", field.key);
     cell.setAttribute("data-ph", field.ph);
@@ -1159,6 +1369,7 @@
   function makeFilesTd(row, fkey) {
     var td = document.createElement("td");
     td.className = "td-files";
+    td.setAttribute("data-ck", fkey);
     var cell = document.createElement("div");
     cell.className = "files-cell";
     cell.setAttribute("data-id", row.id);
@@ -1205,6 +1416,122 @@
     return td;
   }
 
+  // ---- Cột "Thời gian": mốc tải lên của từng file, xếp thẳng hàng với cột file liền trước ----
+  // "dd/mm/yy hh:mm" — đủ gọn cho cột hẹp; xem đầy đủ tới giây ở tooltip
+  function fmtUploadShort(v) {
+    if (!v) return "";
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return "";
+    function p(n) { return n < 10 ? "0" + n : String(n); }
+    return p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + String(d.getFullYear()).slice(-2) +
+      " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function makeTimeTd(row, fkey) {
+    var td = document.createElement("td");
+    td.className = "td-time";
+    td.setAttribute("data-ck", TIME_CK[fkey] || "timeFiles");
+    var cell = document.createElement("div");
+    cell.className = "time-cell";
+    (Array.isArray(row[fkey]) ? row[fkey] : []).forEach(function (f) {
+      var item = document.createElement("span");
+      var short = fmtUploadShort(f.uploadedAt);
+      if (short) {
+        item.className = "time-item";
+        item.textContent = short;
+        item.setAttribute("title", "Tải lên: " + fmtUploadTime(f.uploadedAt) + "\n" + (f.name || "file"));
+      } else {
+        item.className = "time-item is-empty";   // file tải lên trước khi có mốc thời gian
+        item.textContent = "—";
+        item.setAttribute("title", (f.name || "file") + "\nFile cũ — chưa lưu mốc thời gian");
+      }
+      cell.appendChild(item);
+    });
+    td.appendChild(cell);
+    return td;
+  }
+  // Ghi chú: MỖI FILE một dòng riêng, xếp thẳng hàng với cột File và cột Thời gian bên trái;
+  // dưới cùng thêm một dòng ghi chú chung cho cả hàng, thẳng hàng với nút "+ File".
+  // Ghi chú của file nằm ngay trong chính file đó (f.note) nên xoá file là ghi chú đi theo.
+  function fileByUid(row, key) {
+    var a = Array.isArray(row.files) ? row.files : [];
+    for (var i = 0; i < a.length; i++) if (String(a[i].uid || a[i].id || "") === String(key)) return a[i];
+    return null;
+  }
+  function makeNoteLine(rowId, key, ph, html, title) {
+    var line = document.createElement("div");
+    line.className = "cell note-line";
+    line.setAttribute("contenteditable", canEdit() ? "true" : "false");   // giống makeCell: chỉ xem thì không sửa được
+    line.setAttribute("data-id", rowId);
+    line.setAttribute("data-key", key);
+    line.setAttribute("data-ph", ph);
+    line.setAttribute("spellcheck", "false");
+    if (title) line.setAttribute("title", title);
+    var v = sanitizeHtml(html || "");
+    line.innerHTML = v;
+    if (htmlToText(v).trim() === "") line.classList.add("is-empty");
+    return line;
+  }
+  function makeNoteTd(row) {
+    var td = document.createElement("td");
+    td.className = "td-note";
+    td.setAttribute("data-ck", "ghiChu");
+    var cell = document.createElement("div");
+    cell.className = "note-cell";
+
+    var list = document.createElement("div");
+    list.className = "note-list";
+    (Array.isArray(row.files) ? row.files : []).forEach(function (f) {
+      list.appendChild(makeNoteLine(row.id, "note:" + (f.uid || f.id || ""),
+        "Ghi chú cho file…", f.note, f.name || "file"));
+    });
+    cell.appendChild(list);
+
+    var rowLine = makeNoteLine(row.id, "ghiChu", "Ghi chú chung…", row.ghiChu, "Ghi chú cho cả dòng");
+    rowLine.classList.add("note-line--row");
+    cell.appendChild(rowLine);
+
+    td.appendChild(cell);
+    return td;
+  }
+  // CSV: tên file và mốc thời gian giữ nguyên thứ tự để đối chiếu được với nhau
+  function fileNamesCsv(a) { return (Array.isArray(a) ? a : []).map(function (f) { return f.name || ""; }).join("; "); }
+  // ghi chú của từng file, cùng thứ tự với tên file; ghi chú chung của cả dòng xếp sau cùng
+  function notesCsv(row) {
+    var out = (Array.isArray(row.files) ? row.files : []).map(function (f) { return htmlToText(f.note || "").trim(); });
+    var rn = htmlToText(row.ghiChu || "").trim();
+    if (rn) out.push(rn);
+    return out.join("; ");
+  }
+  // gộp mọi ghi chú của một dòng để phục vụ tìm kiếm và lọc cột
+  function notesText(row) {
+    var t = htmlToText(row.ghiChu || "");
+    (Array.isArray(row.files) ? row.files : []).forEach(function (f) { t += " " + htmlToText(f.note || ""); });
+    return t;
+  }
+  function fileTimesCsv(a) { return (Array.isArray(a) ? a : []).map(function (f) { return fmtUploadTime(f.uploadedAt) || "—"; }).join("; "); }
+
+  // Đọc JSON an toàn: khi máy chủ trục trặc nó trả HTML/text, JSON.parse sẽ ném lỗi
+  // khó hiểu ("Unexpected token <") che mất nguyên nhân thật.
+  function apiJson(r) {
+    return r.text().then(function (t) {
+      try { return JSON.parse(t); } catch (e) {}
+      throw new Error("máy chủ trả lỗi HTTP " + r.status);
+    });
+  }
+  // Thử lại vài lần trước khi bỏ cuộc: một lần trục trặc mạng không đáng để vứt bỏ
+  // cả chục MB đã tải xong.
+  function retryUp(make, tries) {
+    return make().catch(function (err) {
+      if (tries <= 1) throw err;
+      return new Promise(function (ok) { setTimeout(ok, 900); }).then(function () { return retryUp(make, tries - 1); });
+    });
+  }
+  // Tải hỏng giữa chừng → dọn các mảnh đã lên. Không dọn thì chúng nằm lại chiếm
+  // dung lượng vĩnh viễn mà không thuộc file nào.
+  function dropChunks(ids) {
+    if (!ids || !ids.length) return;
+    fetch("api/files?chunks=" + ids.join(","), { method: "DELETE", headers: authHeaders() }).catch(function () {});
+  }
   // file > CHUNK_SIZE → cắt thành mảnh, tải tuần tự, rồi gọi finish để máy chủ ghép
   function uploadChunked(proc) {
     var total = Math.ceil(proc.blob.size / CHUNK_SIZE);
@@ -1213,18 +1540,25 @@
     for (var i = 0; i < total; i++) (function (idx) {
       p = p.then(function () {
         var part = proc.blob.slice(idx * CHUNK_SIZE, Math.min((idx + 1) * CHUNK_SIZE, proc.blob.size));
-        return fetch("api/files?action=chunk", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: part })
-          .then(function (r) { return r.json(); })
-          .then(function (j) {
-            if (!j || !j.ok || !j.chunkId) throw new Error((j && j.error) || "Tải mảnh thất bại");
-            ids.push(j.chunkId);
-          });
+        return retryUp(function () {
+          return fetch("api/files?action=chunk", { method: "POST", headers: authHeaders({ "Content-Type": "application/octet-stream" }), body: part })
+            .then(apiJson)
+            .then(function (j) {
+              if (!j || !j.ok || !j.chunkId) throw new Error((j && j.error) || "tải mảnh thất bại");
+              return j.chunkId;
+            });
+        }, 3).then(function (cid) { ids.push(cid); });
       });
     })(i);
     return p.then(function () {
-      return fetch("api/files?action=finish&name=" + encodeURIComponent(proc.name) +
-        "&type=" + encodeURIComponent(proc.type) + "&chunks=" + ids.join(","), { method: "POST" })
-        .then(function (r) { return r.json(); });
+      return retryUp(function () {
+        return fetch("api/files?action=finish&name=" + encodeURIComponent(proc.name) +
+          "&type=" + encodeURIComponent(proc.type) + "&chunks=" + ids.join(","), { method: "POST", headers: authHeaders() })
+          .then(apiJson);
+      }, 3);
+    }).catch(function (err) {
+      dropChunks(ids);          // trả lại dung lượng đã chiếm rồi mới báo lỗi
+      throw err;
     });
   }
   // tải xuống file chia mảnh: lấy từng mảnh rồi ghép thành Blob (né giới hạn response của Vercel)
@@ -1250,6 +1584,7 @@
   }
 
   function handleFilesSelected(rowId, fkey, fileList) {
+    if (!canEdit()) return;
     var row = findRow(rowId);
     if (!row || !fileList || !fileList.length) return;
     if (!Array.isArray(row[fkey])) row[fkey] = [];
@@ -1272,8 +1607,8 @@
             var up = (proc.blob.size > CHUNK_SIZE)
               ? uploadChunked(proc)
               : fetch("api/files?name=" + encodeURIComponent(proc.name) + "&type=" + encodeURIComponent(proc.type),
-                  { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: proc.blob })
-                  .then(function (r) { return r.json(); });
+                  { method: "POST", headers: authHeaders({ "Content-Type": "application/octet-stream" }), body: proc.blob })
+                  .then(apiJson);
             return up.then(function (j) {
               if (j && j.ok && j.file) { j.file.uid = uid(); j.file.uploadedAt = new Date().toISOString(); row[fkey].push(j.file); okCount++; }
               else { toast((j && j.error) || ("Tải lên thất bại: " + file.name)); }
@@ -1286,7 +1621,9 @@
             okCount++;
           });
         }
-      }).catch(function () { toast("Lỗi khi tải “" + file.name + "”"); });
+      }).catch(function (err) {
+        toast("Lỗi khi tải “" + file.name + "”: " + ((err && err.message) || "không rõ nguyên nhân"));
+      });
     });
 
     chain.then(function () {
@@ -1297,6 +1634,7 @@
   }
 
   function removeFile(rowId, fkey, key) {
+    if (!canAdmin()) { toast("Chỉ quản trị mới được xoá file"); return; }
     var row = findRow(rowId);
     if (!row || !Array.isArray(row[fkey])) return;
     var removed = null;
@@ -1306,7 +1644,7 @@
       return true;
     });
     if (removed && removed.id && SERVER_MODE && storageMode === "server") {
-      fetch("api/files?id=" + encodeURIComponent(removed.id), { method: "DELETE" }).catch(function () {});
+      fetch("api/files?id=" + encodeURIComponent(removed.id), { method: "DELETE", headers: authHeaders() }).catch(function () {});
     }
     save(); render();
   }
@@ -1633,20 +1971,21 @@
     var fNguoiLam = norm(cf.nguoiLam.trim());
     var fTienDo = norm(cf.tienDo.trim());
     var fTinhTrang = norm(cf.tinhTrang.trim());
-    var filtering = !!(gq || fStt || fHangMuc || fChiTiet || fNguoiLam || fTienDo || fTinhTrang);
+    var fGhiChu = norm(cf.ghiChu.trim());
+    var filtering = !!(gq || fStt || fHangMuc || fChiTiet || fNguoiLam || fTienDo || fTinhTrang || fGhiChu);
 
     var codes = computeCodes();
 
     function textOf(row) {
       return {
         hang: htmlToText(row.hangMuc), chi: htmlToText(row.chiTiet),
-        ng: (row.nguoiLam || []).join(" "), td: htmlToText(row.tienDo), tt: htmlToText(row.tinhTrang)
+        ng: (row.nguoiLam || []).join(" "), td: htmlToText(row.tienDo), tt: htmlToText(row.tinhTrang), gc: notesText(row)
       };
     }
     function rowMatches(i) {
       var t = textOf(state.rows[i]);
       if (gq) {
-        var hay = norm(codes[i] + " " + t.hang + " " + t.chi + " " + t.ng + " " + t.td + " " + t.tt);
+        var hay = norm(codes[i] + " " + t.hang + " " + t.chi + " " + t.ng + " " + t.td + " " + t.tt + " " + t.gc);
         if (hay.indexOf(gq) === -1) return false;
       }
       if (fStt && codes[i].toLowerCase().indexOf(fStt) === -1) return false;
@@ -1655,6 +1994,7 @@
       if (fNguoiLam && norm(t.ng).indexOf(fNguoiLam) === -1) return false;
       if (fTienDo && norm(t.td).indexOf(fTienDo) === -1) return false;
       if (fTinhTrang && norm(t.tt).indexOf(fTinhTrang) === -1) return false;
+      if (fGhiChu && norm(t.gc).indexOf(fGhiChu) === -1) return false;
       return true;
     }
 
@@ -1676,10 +2016,18 @@
       }
     }
 
+    // dòng bị ẩn kéo theo cả nhánh con của nó ra khỏi bảng (vẫn còn nguyên trong dữ liệu)
+    var masked = new Array(state.rows.length), hideFrom = Infinity;
+    for (var mi = 0; mi < state.rows.length; mi++) {
+      var ml = state.rows[mi].level | 0;
+      if (ml > hideFrom) { masked[mi] = true; continue; }
+      hideFrom = Infinity;
+      if (state.rows[mi].hidden) { masked[mi] = true; hideFrom = ml; }
+    }
     tbody.innerHTML = "";
     var shown = 0;
     for (var i = 0; i < state.rows.length; i++) {
-      if (!visible[i]) continue;
+      if (!visible[i] || masked[i]) continue;
       shown++;
       var row = state.rows[i], code = codes[i];
 
@@ -1687,9 +2035,11 @@
       tr.setAttribute("data-id", row.id);
       tr.setAttribute("data-level", String(row.level | 0));
       tr.setAttribute("data-parent", hasChildren(i) ? "1" : "0");   // dòng có con = dòng nhóm (băng nền phân cấp)
+      if (canEdit() && view.rowH[row.id]) tr.style.height = view.rowH[row.id] + "px";
 
       var tdChk = document.createElement("td");
       tdChk.className = "td-check";
+      tdChk.setAttribute("data-ck", "check");
       var chk = document.createElement("input");
       chk.type = "checkbox"; chk.className = "rowcheck";
       chk.setAttribute("data-id", row.id);
@@ -1699,6 +2049,7 @@
 
       var tdStt = document.createElement("td");
       tdStt.className = "td-stt";
+      tdStt.setAttribute("data-ck", "stt");
       var codeSpan = document.createElement("span"); codeSpan.textContent = code; tdStt.appendChild(codeSpan);
       var addBtn = document.createElement("button");
       addBtn.type = "button"; addBtn.className = "row-add"; addBtn.setAttribute("data-id", row.id);
@@ -1706,11 +2057,16 @@
       addBtn.setAttribute("aria-label", "Mở menu chèn dòng " + code);
       addBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
       tdStt.appendChild(addBtn);
+      var rgrip = document.createElement("button");
+      rgrip.type = "button"; rgrip.className = "row-grip"; rgrip.tabIndex = -1;
+      rgrip.setAttribute("title", "Kéo để đổi độ cao dòng · bấm đúp để về mặc định");
+      tdStt.appendChild(rgrip);
       tr.appendChild(tdStt);
 
       for (var f = 0; f < FIELDS.length; f++) {
         var fld = FIELDS[f];
         var td = document.createElement("td");
+        td.setAttribute("data-ck", fld.key);
         if (fld.outline) {
           var tree = document.createElement("div"); tree.className = "tree";
           var indent = document.createElement("span"); indent.className = "indent";
@@ -1729,8 +2085,12 @@
         tr.appendChild(td);
       }
       tr.appendChild(makeFilesTd(row, "files"));           // File đang trình
+      tr.appendChild(makeTimeTd(row, "files"));            //   ↳ Thời gian
+      tr.appendChild(makeNoteTd(row));                     // Ghi chú
       tr.appendChild(makeFilesTd(row, "filesDuyet"));      // File đã duyệt
+      tr.appendChild(makeTimeTd(row, "filesDuyet"));       //   ↳ Thời gian
       tr.appendChild(makeFilesTd(row, "filesChapThuan"));  // Hồ sơ chấp thuận
+      tr.appendChild(makeTimeTd(row, "filesChapThuan"));   //   ↳ Thời gian
       tbody.appendChild(tr);
     }
 
@@ -1754,6 +2114,7 @@
     }
     selPill.textContent = sel;
     btnDel.disabled = sel === 0;
+    btnHide.disabled = sel === 0;
     checkAll.checked = total > 0 && sel === total;
     checkAll.indeterminate = sel > 0 && sel < total;
   }
@@ -1879,11 +2240,19 @@
 
   // ================= cell editing / navigation =================
   tbody.addEventListener("input", function (e) {
+    if (!canEdit()) return;                  // chốt trong mã: chỉ xem thì không ghi gì vào dữ liệu
     var cell = e.target.closest(".cell");
     if (!cell) return;
     var row = findRow(cell.getAttribute("data-id"));
     if (!row) return;
-    row[cell.getAttribute("data-key")] = cell.innerHTML;
+    var ck = cell.getAttribute("data-key") || "";
+    if (ck.indexOf("note:") === 0) {          // ghi chú gắn với một file cụ thể
+      var nf = fileByUid(row, ck.slice(5));
+      if (!nf) return;
+      nf.note = cell.innerHTML;
+    } else {
+      row[ck] = cell.innerHTML;
+    }
     cell.classList.toggle("is-empty", htmlToText(cell.innerHTML).trim() === "");
     save();
   });
@@ -1912,9 +2281,9 @@
   // clicks: chip remove · open combo · expand/collapse
   tbody.addEventListener("click", function (e) {
     var radd = e.target.closest(".row-add");
-    if (radd) { openRowAddPop(radd); return; }
+    if (radd) { if (canEdit()) openRowAddPop(radd); return; }
     var fadd = e.target.closest(".file-add");
-    if (fadd) { var finp = fadd.parentNode.querySelector(".file-input"); if (finp) { finp.value = ""; finp.click(); } return; }
+    if (fadd) { if (!canEdit()) return; var finp = fadd.parentNode.querySelector(".file-input"); if (finp) { finp.value = ""; finp.click(); } return; }
     var fdel = e.target.closest(".file-del");
     if (fdel) { e.preventDefault(); removeFile(fdel.getAttribute("data-id"), fdel.getAttribute("data-fkey") || "files", fdel.getAttribute("data-fid")); return; }
     var flink = e.target.closest(".file-link");
@@ -1930,6 +2299,7 @@
     }
     var x = e.target.closest(".chip .x");
     if (x) {
+      if (!canEdit()) return;
       e.stopPropagation();
       var trigX = x.closest(".combo-trigger");
       var rowX = findRow(trigX.getAttribute("data-id"));
@@ -1940,9 +2310,9 @@
       return;
     }
     var trig = e.target.closest(".combo-trigger");
-    if (trig) { openCombo(trig); return; }
+    if (trig) { if (canEdit()) openCombo(trig); return; }
     var strig = e.target.closest(".status-trigger");
-    if (strig) { openStatusPop(strig); return; }
+    if (strig) { if (canEdit()) openStatusPop(strig); return; }
     var tw = e.target.closest(".twisty");
     if (tw && !tw.classList.contains("leaf")) {
       e.preventDefault();
@@ -1951,6 +2321,22 @@
     }
   });
 
+  // sang ô kế bên, BỎ QUA cột đang ẩn; hết dòng thì vòng sang dòng trên/dưới
+  function stepTd(tr, idx, dir) {
+    var i = idx + dir;
+    while (i >= 2 && i < tr.children.length) {
+      if (tr.children[i].offsetParent !== null) return tr.children[i];
+      i += dir;
+    }
+    var sib = dir > 0 ? tr.nextElementSibling : tr.previousElementSibling;
+    if (!sib) return null;
+    var j = dir > 0 ? 2 : sib.children.length - 1;
+    while (j >= 2 && j < sib.children.length) {
+      if (sib.children[j].offsetParent !== null) return sib.children[j];
+      j += dir;
+    }
+    return null;
+  }
   tbody.addEventListener("keydown", function (e) {
     var cell = e.target.closest(".cell");
     var trig = e.target.closest(".combo-trigger");
@@ -2012,11 +2398,9 @@
         e.preventDefault(); openCombo(trig); comboSearch.value = e.key; renderComboList(); return;
       }
     }
-    // Tab / Shift+Tab (cột cuối = 9: Hồ sơ chấp thuận)
+    // Tab / Shift+Tab — stepTd tự bỏ qua cột đang ẩn và vòng sang dòng kế
     if (e.key === "Tab") {
-      var tt = null;
-      if (e.shiftKey) tt = (idx > 2) ? tr.children[idx - 1] : (tr.previousElementSibling ? tr.previousElementSibling.children[9] : null);
-      else           tt = (idx < 9) ? tr.children[idx + 1] : (tr.nextElementSibling ? tr.nextElementSibling.children[2] : null);
+      var tt = stepTd(tr, idx, e.shiftKey ? -1 : 1);
       if (tt) { e.preventDefault(); gotoTd(tt, e.shiftKey); }
       return;
     }
@@ -2029,11 +2413,11 @@
 
     if (e.key === "ArrowLeft") {
       if (cell && info.before.length !== 0) return;
-      target = (idx > 2) ? tr.children[idx - 1] : (tr.previousElementSibling ? tr.previousElementSibling.children[9] : null);
+      target = stepTd(tr, idx, -1);
       atEnd = true;
     } else if (e.key === "ArrowRight") {
       if (cell && info.after.length !== 0) return;
-      target = (idx < 9) ? tr.children[idx + 1] : (tr.nextElementSibling ? tr.nextElementSibling.children[2] : null);
+      target = stepTd(tr, idx, 1);
     } else if (e.key === "ArrowUp") {
       if (cell && info.before.indexOf("\n") !== -1) return;
       target = tr.previousElementSibling ? tr.previousElementSibling.children[idx] : null;
@@ -2085,6 +2469,7 @@
 
   // add row (sibling after the focused row's subtree, same level)
   function addRow() {
+    if (!canEdit()) return;
     var hasFilter = state.query || Object.keys(state.colFilters).some(function (k) { return state.colFilters[k]; });
     if (hasFilter) clearFilters();
     var at = state.focusId ? indexOfRow(state.focusId) : -1;
@@ -2107,6 +2492,7 @@
   // 'below': cùng cấp, sau TOÀN BỘ nhánh của dòng tham chiếu
   // 'child': cấp con, làm con CUỐI của dòng tham chiếu (tự mở nếu đang thu gọn)
   function insertRowAt(refId, mode) {
+    if (!canEdit()) return;
     var i = indexOfRow(refId);
     if (i < 0) { addRow(); return; }
     var hasFilter = state.query || Object.keys(state.colFilters).some(function (k) { return state.colFilters[k]; });
@@ -2156,6 +2542,7 @@
     if (rowAddPop.classList.contains("show") && !rowAddPop.contains(e.target) && !e.target.closest(".row-add")) closeRowAddPop();
   });
   document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && delModal.classList.contains("show")) { e.preventDefault(); closeDelConfirm(); return; }
     if (e.key === "Escape" && rowAddPop.classList.contains("show")) { e.preventDefault(); closeRowAddPop(); }
   });
   window.addEventListener("scroll", function () { if (rowAddPop.classList.contains("show")) closeRowAddPop(); }, true);
@@ -2182,6 +2569,7 @@
     updateSelectionUI();
   }
   function changeLevelSelected(delta) {
+    if (!canEdit()) return;
     var checkedIds = getCheckedIds();
     var fromChecks = checkedIds.length > 0;
     var ids = fromChecks ? rootsOf(checkedIds)
@@ -2220,23 +2608,304 @@
   document.getElementById("btnOutdent").addEventListener("click", function () { changeLevelSelected(-1); });
 
   // delete selected (+ their descendants)
-  btnDel.addEventListener("click", function () {
+  // ---- xác nhận trước khi xoá dòng: thao tác này KHÔNG hoàn tác được ----
+  var delModal = document.createElement("div");
+  delModal.className = "modal-overlay";
+  delModal.innerHTML =
+    '<div class="modal modal--sm">' +
+      '<div class="modal-head"><h3>Xác nhận xoá dòng</h3><button class="modal-close" type="button" aria-label="Đóng">×</button></div>' +
+      '<div class="modal-body"><p class="del-lead"></p><ul class="del-list"></ul><p class="del-files"></p></div>' +
+      '<div class="modal-foot"><span class="modal-hint">Không thể hoàn tác.</span>' +
+        '<span class="del-actions"><button class="modal-cancel" type="button">Huỷ</button>' +
+        '<button class="modal-done modal-done--danger" type="button">Xoá</button></span>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(delModal);
+  var pendingKill = null;
+
+  // gom dòng đã tick + toàn bộ nhánh con của chúng
+  function collectKill() {
     var checks = tbody.querySelectorAll(".rowcheck:checked");
-    if (!checks.length) return;
-    var kill = {};
+    if (!checks.length) return null;
+    var kill = {}, direct = 0;
     for (var i = 0; i < checks.length; i++) {
       var idx = indexOfRow(checks[i].getAttribute("data-id"));
       if (idx < 0) continue;
+      direct++;
       var end = subtreeEnd(idx);
       for (var k = idx; k <= end; k++) kill[state.rows[k].id] = true;
     }
-    var n = 0;
+    if (!Object.keys(kill).length) return null;
+    var names = [], files = 0;
+    state.rows.forEach(function (r) {
+      if (!kill[r.id]) return;
+      names.push(htmlToText(r.hangMuc).trim() || "(dòng trống)");
+      ["files", "filesDuyet", "filesChapThuan"].forEach(function (fk) { files += (r[fk] || []).length; });
+    });
+    return { kill: kill, total: names.length, direct: direct, names: names, files: files };
+  }
+
+  function openDelConfirm(info) {
+    pendingKill = info;
+    var extra = info.total - info.direct;
+    delModal.querySelector(".del-lead").textContent = "Sẽ xoá " + info.total + " dòng" +
+      (extra > 0 ? " — gồm " + info.direct + " dòng đã chọn và " + extra + " dòng con của chúng" : "") + ":";
+    var ul = delModal.querySelector(".del-list");
+    ul.innerHTML = "";
+    info.names.slice(0, 8).forEach(function (n) {
+      var li = document.createElement("li"); li.textContent = n; ul.appendChild(li);
+    });
+    if (info.names.length > 8) {
+      var more = document.createElement("li");
+      more.className = "del-more";
+      more.textContent = "… và " + (info.names.length - 8) + " dòng nữa";
+      ul.appendChild(more);
+    }
+    delModal.querySelector(".del-files").textContent = info.files
+      ? "Kèm " + info.files + " file đính kèm sẽ biến mất khỏi bảng." : "";
+    delModal.classList.add("show");
+    delModal.querySelector(".modal-cancel").focus();   // mặc định đứng ở nút Huỷ, tránh Enter lỡ tay
+  }
+  function closeDelConfirm() { delModal.classList.remove("show"); pendingKill = null; }
+
+  function doDeleteRows() {
+    if (!pendingKill) return;
+    var kill = pendingKill.kill, n = 0;
     state.rows = state.rows.filter(function (r) { if (kill[r.id]) { n++; return false; } return true; });
     Object.keys(kill).forEach(function (id) { delete state.selected[id]; });
+    closeDelConfirm();
     normalizeLevels(); save(); render();
     toast("Đã xóa " + n + " dòng");
+  }
+
+  delModal.addEventListener("click", function (e) {
+    if (e.target === delModal || e.target.closest(".modal-close") || e.target.closest(".modal-cancel")) { closeDelConfirm(); return; }
+    if (e.target.closest(".modal-done")) doDeleteRows();
+  });
+  btnDel.addEventListener("click", function () {
+    var info = collectKill();
+    if (info) openDelConfirm(info);
   });
 
+
+  var btnView = document.getElementById("btnView");
+  var btnHide = document.getElementById("btnHide");
+
+  // ================= Co giãn & ẩn/hiện cột, dòng =================
+  // Bề rộng cột · cột bị ẩn · độ cao dòng = tuỳ chọn xem của RIÊNG máy này (localStorage),
+  //   mỗi người tự chỉnh, không ảnh hưởng người khác.
+  // Dòng bị ẩn = thuộc tính của dòng, lưu chung trên máy chủ nên cả nhóm thấy giống nhau.
+  var COLUMNS = [
+    { key: "check",          label: "",                     w: 40, lock: true },
+    { key: "stt",            label: "STT",                  w: 88 },
+    { key: "hangMuc",        label: "Hạng mục",             w: 340 },
+    { key: "chiTiet",        label: "Thông tin chi tiết",   w: 300 },
+    { key: "nguoiLam",       label: "Người làm",            w: 220 },
+    { key: "tienDo",         label: "Tiến độ kế hoạch",     w: 130 },
+    { key: "tinhTrang",      label: "Tình trạng hồ sơ",     w: 160 },
+    { key: "files",          label: "File đang trình",      w: 140 },
+    { key: "timeFiles",      label: "Thời gian trình",      w: 112 },
+    { key: "ghiChu",         label: "Ghi chú",              w: 200 },
+    { key: "filesDuyet",     label: "File đã duyệt",        w: 140 },
+    { key: "timeDuyet",      label: "Thời gian duyệt",      w: 112 },
+    { key: "filesChapThuan", label: "Hồ sơ chấp thuận",     w: 140 },
+    { key: "timeChapThuan",  label: "Thời gian chấp thuận", w: 112 }
+  ];
+  var TIME_CK = { files: "timeFiles", filesDuyet: "timeDuyet", filesChapThuan: "timeChapThuan" };
+  var MIN_COL_W = 56, MIN_ROW_H = 28;
+  var DENSITY = [
+    { key: "compact", label: "Gọn",    pad: "3px 10px",  min: 26, fpad: 3 },
+    { key: "normal",  label: "Vừa",    pad: "7px 10px",  min: 36, fpad: 5 },
+    { key: "roomy",   label: "Thoáng", pad: "13px 12px", min: 54, fpad: 11 }
+  ];
+
+  var VIEW_KEY = "bangHangMuc.view.v1";
+  var view = { colW: {}, colHide: {}, rowH: {}, density: "normal" };
+  function loadView() {
+    try {
+      var v = JSON.parse(localStorage.getItem(VIEW_KEY));
+      if (!v || typeof v !== "object") return;
+      view.colW = v.colW || {}; view.colHide = v.colHide || {}; view.rowH = v.rowH || {};
+      if (DENSITY.some(function (d) { return d.key === v.density; })) view.density = v.density;
+    } catch (e) {}
+  }
+  function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch (e) {} }
+  function densityOf() {
+    for (var i = 0; i < DENSITY.length; i++) if (DENSITY[i].key === view.density) return DENSITY[i];
+    return DENSITY[1];
+  }
+
+  // bề rộng cột + cột ẩn + độ cao ô đổ vào một thẻ style động, không phải sờ tới từng ô
+  var viewStyle = document.createElement("style");
+  document.head.appendChild(viewStyle);
+  // Chỉ xem → luôn dựng theo mặc định. Tuỳ chọn riêng vẫn nằm yên trong localStorage
+  // và quay lại khi đăng nhập, nếu không người mất quyền sẽ kẹt với bố cục không sửa được.
+  function applyView() {
+    var css = [], total = 0, on = canEdit();
+    COLUMNS.forEach(function (c) {
+      if (on && !c.lock && view.colHide[c.key]) { css.push('[data-ck="' + c.key + '"]{display:none}'); return; }
+      var w = (c.lock || !on) ? c.w : Math.max(MIN_COL_W, view.colW[c.key] || c.w);
+      total += w;
+      css.push('table th[data-ck="' + c.key + '"]{width:' + w + 'px}');
+    });
+    var d = on ? densityOf() : DENSITY[1];
+    css.push("table{table-layout:fixed;width:" + total + "px;min-width:" + total + "px}");
+    css.push(".cell{min-height:" + d.min + "px;padding:" + d.pad + "}");
+    css.push(".files-cell,.time-cell{padding-top:" + d.fpad + "px}");
+    viewStyle.textContent = css.join("\n");
+  }
+  function initColGrips() {
+    var ths = document.querySelectorAll("thead th");
+    for (var i = 0; i < ths.length && i < COLUMNS.length; i++) {
+      ths[i].setAttribute("data-ck", COLUMNS[i].key);
+      if (COLUMNS[i].lock) continue;
+      var g = document.createElement("button");
+      g.type = "button"; g.className = "col-grip"; g.tabIndex = -1;
+      g.setAttribute("data-grip", COLUMNS[i].key);
+      g.setAttribute("title", "Kéo để đổi bề rộng · bấm đúp để về mặc định");
+      ths[i].appendChild(g);
+    }
+  }
+
+  // ---- kéo bề rộng cột / độ cao dòng ----
+  var colDrag = null, rowDrag = null;
+  document.addEventListener("mousedown", function (e) {
+    if (!e.target || !e.target.closest || !canEdit()) return;
+    var cg = e.target.closest(".col-grip");
+    if (cg) {
+      e.preventDefault();
+      var th = cg.closest("th");
+      colDrag = { key: cg.getAttribute("data-grip"), x: e.clientX, w: th.offsetWidth, grip: cg };
+      cg.classList.add("is-dragging");
+      document.body.classList.add("is-resizing");
+      return;
+    }
+    var rg = e.target.closest(".row-grip");
+    if (rg) {
+      e.preventDefault();
+      var trg = rg.closest("tr");
+      rowDrag = { id: trg.getAttribute("data-id"), y: e.clientY, h: trg.offsetHeight, tr: trg, grip: rg };
+      rg.classList.add("is-dragging");
+      document.body.classList.add("is-resizing-row");
+    }
+  });
+  document.addEventListener("mousemove", function (e) {
+    if (colDrag) {
+      view.colW[colDrag.key] = Math.max(MIN_COL_W, colDrag.w + (e.clientX - colDrag.x));
+      applyView();
+    } else if (rowDrag) {
+      var h = Math.max(MIN_ROW_H, rowDrag.h + (e.clientY - rowDrag.y));
+      view.rowH[rowDrag.id] = h;
+      rowDrag.tr.style.height = h + "px";
+    }
+  });
+  document.addEventListener("mouseup", function () {
+    if (colDrag) { colDrag.grip.classList.remove("is-dragging"); document.body.classList.remove("is-resizing"); colDrag = null; saveView(); }
+    if (rowDrag) { rowDrag.grip.classList.remove("is-dragging"); document.body.classList.remove("is-resizing-row"); rowDrag = null; saveView(); }
+  });
+  // bấm đúp tay kéo → trả về mặc định
+  document.addEventListener("dblclick", function (e) {
+    if (!e.target || !e.target.closest || !canEdit()) return;
+    var cg = e.target.closest(".col-grip");
+    if (cg) { delete view.colW[cg.getAttribute("data-grip")]; applyView(); saveView(); return; }
+    var rg = e.target.closest(".row-grip");
+    if (rg) {
+      var trg = rg.closest("tr");
+      delete view.rowH[trg.getAttribute("data-id")];
+      trg.style.height = ""; saveView();
+    }
+  });
+
+  // ---- bảng chọn hiển thị ----
+  var viewPop = document.createElement("div");
+  viewPop.className = "view-pop";
+  document.body.appendChild(viewPop);
+
+  function hiddenRowCount() {
+    var n = 0;
+    for (var i = 0; i < state.rows.length; i++) if (state.rows[i].hidden) n++;
+    return n;
+  }
+  function renderViewPop() {
+    var hid = hiddenRowCount(), h = '<div class="view-sec">Độ cao dòng</div><div class="dens-group">';
+    DENSITY.forEach(function (x) {
+      h += '<button type="button" class="dens-btn' + (x.key === view.density ? " on" : "") + '" data-dens="' + x.key + '">' + x.label + '</button>';
+    });
+    h += '</div><div class="view-sec">Cột hiển thị</div><div class="view-list">';
+    COLUMNS.forEach(function (c) {
+      if (c.lock) return;
+      h += '<label class="view-item"><input type="checkbox" data-col="' + c.key + '"' +
+           (view.colHide[c.key] ? "" : " checked") + '><span></span></label>';
+    });
+    h += '</div><div class="view-sec">Dòng đang ẩn</div><div class="view-row">' +
+         '<span class="view-note">' + (hid ? hid + " dòng" : "Không có dòng nào") + '</span>' +
+         '<button type="button" class="view-link" data-act="unhide"' + (hid ? "" : " disabled") + '>Hiện lại tất cả</button></div>' +
+         '<div class="view-sec">Đặt lại</div><div class="view-row">' +
+         '<span class="view-note">Bề rộng cột &amp; độ cao dòng</span>' +
+         '<button type="button" class="view-link" data-act="reset">Về mặc định</button></div>';
+    viewPop.innerHTML = h;
+    // tên cột gán bằng textContent để khỏi phải lo thoát ký tự HTML
+    var labels = viewPop.querySelectorAll(".view-item span"), k = 0;
+    COLUMNS.forEach(function (c) { if (!c.lock) { labels[k].textContent = c.label; k++; } });
+  }
+  function openViewPop() {
+    renderViewPop();
+    viewPop.classList.add("show");
+    var r = btnView.getBoundingClientRect();
+    viewPop.style.top = Math.round(r.bottom + 6) + "px";
+    viewPop.style.left = Math.round(Math.max(8, Math.min(r.right - viewPop.offsetWidth, window.innerWidth - viewPop.offsetWidth - 8))) + "px";
+  }
+  function closeViewPop() { viewPop.classList.remove("show"); }
+
+  viewPop.addEventListener("click", function (e) {
+    if (!canEdit()) return;
+    var db = e.target.closest(".dens-btn");
+    if (db) { view.density = db.getAttribute("data-dens"); applyView(); saveView(); renderViewPop(); return; }
+    var lk = e.target.closest(".view-link");
+    if (!lk || lk.disabled) return;
+    if (lk.getAttribute("data-act") === "unhide") {
+      var n = 0;
+      state.rows.forEach(function (r) { if (r.hidden) { r.hidden = false; n++; } });
+      save(); render(); renderViewPop();
+      toast("Đã hiện lại " + n + " dòng");
+    } else {
+      view.colW = {}; view.rowH = {}; view.density = "normal";
+      applyView(); saveView(); render(); renderViewPop();
+      toast("Đã đặt lại bề rộng cột và độ cao dòng");
+    }
+  });
+  viewPop.addEventListener("change", function (e) {
+    if (!canEdit()) return;
+    var cb = e.target.closest("input[data-col]");
+    if (!cb) return;
+    var key = cb.getAttribute("data-col");
+    if (cb.checked) delete view.colHide[key]; else view.colHide[key] = true;
+    applyView(); saveView();
+  });
+  document.addEventListener("mousedown", function (e) {
+    if (viewPop.classList.contains("show") && !viewPop.contains(e.target) && !e.target.closest("#btnView")) closeViewPop();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && viewPop.classList.contains("show")) { e.preventDefault(); closeViewPop(); }
+  });
+  btnView.addEventListener("click", function () {
+    if (!canEdit()) return;
+    if (viewPop.classList.contains("show")) closeViewPop(); else openViewPop();
+  });
+
+  // ---- ẩn dòng đã chọn (không xoá — hiện lại được trong bảng Hiển thị) ----
+  btnHide.addEventListener("click", function () {
+    if (!canEdit()) return;
+    var info = collectKill();   // dùng lại: gom dòng đã tick kèm toàn bộ nhánh con
+    if (!info) return;
+    var n = 0;
+    state.rows.forEach(function (r) { if (info.kill[r.id] && !r.hidden) { r.hidden = true; n++; } });
+    state.selected = {};
+    save(); render();
+    toast("Đã ẩn " + n + " dòng — mở mục Hiển thị để hiện lại");
+  });
+
+  loadView(); initColGrips(); applyView();
   // search + per-column filters
   searchEl.addEventListener("input", function () { state.query = searchEl.value; render(); });
   var colFilterEls = document.querySelectorAll(".colfilter");
@@ -2256,9 +2925,9 @@
       var r = state.rows[i];
       lines.push([codes[i], htmlToText(r.hangMuc), htmlToText(r.chiTiet),
         (r.nguoiLam || []).join("; "), htmlToText(r.tienDo), htmlToText(r.tinhTrang),
-        (r.files || []).map(function (f) { return f.name; }).join("; "),
-        (r.filesDuyet || []).map(function (f) { return f.name; }).join("; "),
-        (r.filesChapThuan || []).map(function (f) { return f.name; }).join("; ")].map(esc).join(","));
+        fileNamesCsv(r.files), fileTimesCsv(r.files), notesCsv(r),
+        fileNamesCsv(r.filesDuyet), fileTimesCsv(r.filesDuyet),
+        fileNamesCsv(r.filesChapThuan), fileTimesCsv(r.filesChapThuan)].map(esc).join(","));
     }
     var csv = "\uFEFF" + lines.join("\r\n");
     var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -2311,6 +2980,8 @@
     if (field !== "" || row.length) { row.push(field); rows.push(row); }
     return rows;
   }
+  // vị trí cột "Ghi chú" trong CSV đang nhập (-1 = CSV cũ không có cột này → giữ nguyên ghi chú hiện có)
+  var importNoteIdx = -1;
   function applyRec(target, rec) {
     target.hangMuc = textToHtml(rec[1] != null ? String(rec[1]) : "");
     target.chiTiet = textToHtml(rec[2] != null ? String(rec[2]) : "");
@@ -2321,12 +2992,17 @@
     target.nguoiLam = names;
     target.tienDo = textToHtml(rec[4] != null ? String(rec[4]) : "");
     target.tinhTrang = textToHtml(rec[5] != null ? String(rec[5]) : "");
+    // chỉ nhận ghi chú từ CSV khi dòng chưa có file — dòng có file thì ô này là nhiều ghi chú
+    // gộp lại, ghi đè sẽ làm hỏng ghi chú riêng của từng file
+    if (importNoteIdx >= 0 && !(target.files && target.files.length))
+      target.ghiChu = textToHtml(rec[importNoteIdx] != null ? String(rec[importNoteIdx]) : "");
   }
   function importCSV(text) {
     var records = parseCSV(text).filter(function (r) { return r.some(function (c) { return String(c).trim() !== ""; }); });
     if (!records.length) { toast("File rỗng hoặc không hợp lệ"); return; }
     var head = records[0].map(function (c) { return norm(String(c).trim()); });
     var isHeader = head[0] === "stt" || head.indexOf("hang muc") !== -1;
+    importNoteIdx = isHeader ? head.indexOf("ghi chu") : -1;
     var dataRows = isHeader ? records.slice(1) : records;
     if (!dataRows.length) { toast("Không có dòng dữ liệu để nhập"); return; }
 
@@ -2386,9 +3062,10 @@
   function normalizeRowShape(r) {
     if (typeof r.level !== "number") r.level = 0;
     if (typeof r.collapsed !== "boolean") r.collapsed = false;
-    ["hangMuc", "chiTiet", "tienDo", "tinhTrang"].forEach(function (k) {
+    ["hangMuc", "chiTiet", "tienDo", "tinhTrang", "ghiChu"].forEach(function (k) {
       if (typeof r[k] !== "string") r[k] = (r[k] == null ? "" : String(r[k]));
     });
+    if (typeof r.hidden !== "boolean") r.hidden = false;
     if (!Array.isArray(r.nguoiLam)) r.nguoiLam = r.nguoiLam ? splitPeople(htmlToText(r.nguoiLam)) : [];
     ["files", "filesDuyet", "filesChapThuan"].forEach(function (fk) {
       if (!Array.isArray(r[fk])) r[fk] = [];
@@ -2512,9 +3189,10 @@
     }
   }
   function createPlan() {
+    if (!canEdit()) { toast("Cần đăng nhập quyền sửa để tạo kế hoạch"); return; }
     var name = "Kế hoạch " + (plansCache.length + 1);
     if (storageMode === "server") {
-      fetch(API + "?action=create&name=" + encodeURIComponent(name), { method: "POST" })
+      fetch(API + "?action=create&name=" + encodeURIComponent(name), { method: "POST", headers: authHeaders() })
         .then(function (r) { return r.json(); })
         .then(function (j) {
           if (!j || !j.ok || !j.plan) { toast((j && j.error) || "Không tạo được kế hoạch"); return; }
@@ -2530,10 +3208,11 @@
     }
   }
   function renamePlan(id, name) {
+    if (!canEdit()) { refreshPlanList(); return; }
     name = String(name == null ? "" : name).trim().slice(0, 120);
     if (!name) { refreshPlanList(); return; }
     if (storageMode === "server") {
-      fetch(API + "?action=rename&plan=" + encodeURIComponent(id) + "&name=" + encodeURIComponent(name), { method: "POST" })
+      fetch(API + "?action=rename&plan=" + encodeURIComponent(id) + "&name=" + encodeURIComponent(name), { method: "POST", headers: authHeaders() })
         .then(function (r) { return r.json(); })
         .then(function () { refreshPlanList(); })
         .catch(function () { toast("Không đổi tên được"); });
@@ -2545,8 +3224,9 @@
     if (state.planId === id) { state.planName = name; planTitle.textContent = name; }
   }
   function deletePlan(id) {
+    if (!canAdmin()) { toast("Chỉ quản trị mới được xoá kế hoạch"); return; }
     if (storageMode === "server") {
-      fetch(API + "?action=delete&plan=" + encodeURIComponent(id), { method: "POST" })
+      fetch(API + "?action=delete&plan=" + encodeURIComponent(id), { method: "POST", headers: authHeaders() })
         .then(function (r) { return r.json(); })
         .then(function () { toast("Đã xoá kế hoạch"); refreshPlanList(); })
         .catch(function () { toast("Không xoá được"); });
@@ -2613,24 +3293,33 @@
     var m = (location.hash || "").match(/^#plan=(.+)$/);
     var hashPlan = m ? decodeURIComponent(m[1]) : null;
     if (!SERVER_MODE) {
-      storageMode = "local"; setMode("local"); setPlanMode("local");
+      storageMode = "local"; setMode("local"); setPlanMode("local"); applyRole();
       if (hashPlan && ensureLocalStore().plans[hashPlan]) openPlan(hashPlan);
       else showPlanScreen();
       return;
     }
-    fetch(API + "?list=1").then(function (r) {
+    // hỏi quyền của mật khẩu đã lưu (nếu có) trước, rồi mới tải danh sách kế hoạch
+    fetch(API + "?whoami=1", { headers: authHeaders() }).then(function (r) {
       if (!r.ok) throw new Error("no api");
       return r.json();
+    }).then(function (w) {
+      if (!w || !w.ok) throw new Error("no api");
+      authProtected = !!w.protected;
+      role = w.role || "admin";
+      return fetch(API + "?list=1").then(function (r) {
+        if (!r.ok) throw new Error("no api");
+        return r.json();
+      });
     }).then(function (j) {
       if (!j || !j.ok || !Array.isArray(j.plans)) throw new Error("no api");
-      storageMode = "server"; setMode("server"); setPlanMode("server");
+      storageMode = "server"; setMode("server"); setPlanMode("server"); applyRole();
       renderPlanList(j.plans);
       if (hashPlan) openPlan(hashPlan);
       else showPlanScreen();
       startPolling();
     }).catch(function () {
       // mở qua http nhưng KHÔNG phải máy chủ của ứng dụng (vd Live Server) → lưu cục bộ
-      storageMode = "local"; setMode("local"); setPlanMode("local");
+      storageMode = "local"; setMode("local"); setPlanMode("local"); applyRole();
       if (hashPlan && ensureLocalStore().plans[hashPlan]) openPlan(hashPlan);
       else showPlanScreen();
     });

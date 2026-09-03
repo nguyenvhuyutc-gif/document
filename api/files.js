@@ -26,6 +26,22 @@ const filesCollection = process.env.MONGODB_FILES_COLLECTION || "bim_files";
 const MAX_BYTES = 4.4 * 1024 * 1024;        // giới hạn 1 request (Vercel ~4.5MB)
 const MAX_FILE  = 50 * 1024 * 1024;         // giới hạn 1 file sau khi ghép mảnh
 
+// ---- phân quyền (giống api/data.js): EDIT_KEY = tải file lên, ADMIN_KEY = thêm quyền xoá ----
+function safeEqual(a, b) {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+function getRole(req) {
+  const adminKey = process.env.ADMIN_KEY || "";
+  const editKey = process.env.EDIT_KEY || "";
+  if (!adminKey && !editKey) return "admin";
+  const key = String(req.headers["x-edit-key"] || "");
+  if (adminKey && key && safeEqual(key, adminKey)) return "admin";
+  if (editKey && key && safeEqual(key, editKey)) return "edit";
+  return "view";
+}
+
 async function connectMongo() {
   if (!uri) throw new Error("MONGODB_URI is not configured");
   if (global.__mongoClient && global.__mongoDb) {
@@ -66,6 +82,23 @@ module.exports = async (req, res) => {
     const url = new URL(req.url, "http://localhost");
     const id = url.searchParams.get("id");
     const action = url.searchParams.get("action");
+
+    // Tải xuống (GET) tự do; tải lên (POST) cần EDIT_KEY; xoá (DELETE) cần ADMIN_KEY
+    if (req.method === "POST" || req.method === "DELETE") {
+      const role = getRole(req);
+      // Dọn mảnh rời của lần tải hỏng chỉ cần quyền sửa: ai tải lên được thì được dọn
+      // rác của chính mình. Nó không đụng tới file hoàn chỉnh nào.
+      const looseCleanup = req.method === "DELETE" && url.searchParams.get("chunks");
+      if (req.method === "DELETE" && !looseCleanup && role !== "admin") {
+        res.status(401).json({ ok: false, needKey: true, error: "Cần mật khẩu quản trị để xoá file" });
+        return;
+      }
+      if (role !== "admin" && role !== "edit") {
+        res.status(401).json({ ok: false, needKey: true, error: "Cần mật khẩu quyền sửa để tải file lên" });
+        return;
+      }
+    }
+
     const { db } = await connectMongo();
     const col = db.collection(filesCollection);
 
@@ -173,6 +206,16 @@ module.exports = async (req, res) => {
         createdAt: Date.now()
       });
       res.status(200).json({ ok: true, file: { id: newId, name: name, size: buf.length, type: type, url: "api/files?id=" + newId } });
+      return;
+    }
+
+    // ---- Dọn các mảnh rời còn sót lại của một lần tải hỏng giữa chừng ----
+    if (req.method === "DELETE" && url.searchParams.get("chunks")) {
+      const loose = String(url.searchParams.get("chunks")).split(",").filter(Boolean);
+      if (!loose.length) { res.status(400).json({ ok: false, error: "Thiếu danh sách mảnh" }); return; }
+      // kind:"chunk" là chốt an toàn — không bao giờ xoá nhầm document file hoàn chỉnh
+      const r = await col.deleteMany({ _id: { $in: loose }, kind: "chunk" });
+      res.status(200).json({ ok: true, removed: r.deletedCount });
       return;
     }
 

@@ -19,6 +19,26 @@ function sendJson(res, code, obj) {
   res.status(code).json(obj);
 }
 
+// ---- phân quyền: EDIT_KEY = được sửa/tải file, ADMIN_KEY = thêm quyền xoá ----
+// Chưa đặt cả hai biến môi trường → không khoá gì (tương thích bản cũ).
+function safeEqual(a, b) {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+function getRole(req) {
+  const adminKey = process.env.ADMIN_KEY || "";
+  const editKey = process.env.EDIT_KEY || "";
+  if (!adminKey && !editKey) return "admin";
+  const key = String(req.headers["x-edit-key"] || "");
+  if (adminKey && key && safeEqual(key, adminKey)) return "admin";
+  if (editKey && key && safeEqual(key, editKey)) return "edit";
+  return "view";
+}
+function isProtected() {
+  return !!(process.env.ADMIN_KEY || process.env.EDIT_KEY);
+}
+
 async function connectMongo() {
   if (!uri) throw new Error("MONGODB_URI is not configured");
   if (global.__mongoClient && global.__mongoDb) {
@@ -53,6 +73,24 @@ module.exports = async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
     const q = url.searchParams;
+
+    // ---- kiểm tra quyền của mật khẩu gửi kèm (không cần DB) ----
+    if (req.method === "GET" && q.get("whoami")) {
+      return sendJson(res, 200, { ok: true, role: getRole(req), protected: isProtected() });
+    }
+
+    // Ghi (POST/DELETE) cần quyền: sửa thường cần EDIT_KEY, xoá kế hoạch cần ADMIN_KEY
+    if (req.method === "POST" || req.method === "DELETE") {
+      const role = getRole(req);
+      const isDelete = req.method === "DELETE" || q.get("action") === "delete";
+      if (isDelete && role !== "admin") {
+        return sendJson(res, 401, { ok: false, needKey: true, error: "Cần mật khẩu quản trị để xoá" });
+      }
+      if (role !== "admin" && role !== "edit") {
+        return sendJson(res, 401, { ok: false, needKey: true, error: "Cần mật khẩu quyền sửa" });
+      }
+    }
+
     const { db } = await connectMongo();
     const collection = db.collection(collectionName);
 

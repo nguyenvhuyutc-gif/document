@@ -18,6 +18,7 @@ document/
 │  ├─ data.js           ← đọc/ghi dữ liệu bảng vào MongoDB
 │  └─ files.js          ← ký presigned URL cho S3 + ghi metadata file
 ├─ scripts/
+│  ├─ kiem-tra-cau-hinh.mjs ← kiểm .env + MongoDB + S3 chạy được không
 │  └─ don-file-mo-coi.mjs  ← dọn file mồ côi trên S3 (chạy tay, không tự động)
 ├─ vercel.json          ← rewrite trang gốc, CORS, giới hạn thời gian function
 ├─ .env.example         ← mẫu biến môi trường (copy thành .env để chạy script)
@@ -53,6 +54,12 @@ npm run deploy           # deploy production
 npm run deploy:preview   # deploy bản thử, link riêng
 npm run vercel:env       # kéo biến môi trường production về .env
 npm run vercel:logs      # xem log runtime của function
+```
+
+Kiểm tra cấu hình ở máy (đọc `.env`, thử kết nối MongoDB và S3, xoá sạch sau khi thử):
+
+```bash
+node scripts/kiem-tra-cau-hinh.mjs
 ```
 
 Dọn file mồ côi trên S3 (mặc định chỉ chạy khô, in ra):

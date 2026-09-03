@@ -16,6 +16,7 @@ quyền deploy, nhưng dùng chung MongoDB nên dữ liệu hai bên giống nha
 | `bang-hang-muc.html` | Toàn bộ giao diện — trang gốc `/` rewrite về đây |
 | `api/data.js` | Serverless function đọc/ghi dữ liệu bảng vào MongoDB |
 | `api/files.js` | Ký presigned URL cho S3 + ghi metadata file vào MongoDB |
+| `scripts/kiem-tra-cau-hinh.mjs` | Kiểm `.env` + MongoDB + S3 ở máy — an toàn, chạy lúc nào cũng được |
 | `scripts/don-file-mo-coi.mjs` | Dọn file mồ côi trên S3 — chạy tay, xoá được dữ liệu thật |
 | `vercel.json` | Rewrite trang gốc + CORS + `functions.maxDuration` |
 | `serve.cjs`, `start-server.bat`, `data.json` | **Tư liệu, KHÔNG chạy được nữa** — xem § Bản LAN |

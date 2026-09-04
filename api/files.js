@@ -9,12 +9,21 @@
 //        -> xác minh bằng HEAD trên S3, chuyển pending -> ready
 //        -> { ok, file: { id, name, size, type, url } }
 //
-//  TẢI XUỐNG (tự do, không cần mật khẩu):
+//  TẢI XUỐNG (tự do, không cần mật khẩu — TRỪ file đang nằm trong thùng rác):
 //   GET  /api/files?id=<id>          -> file mới: 302 sang S3 (URL ký, 5 phút)
 //                                    -> file cũ:  trả thẳng từ MongoDB như trước
 //   GET  /api/files?id=<id>&part=<i> -> mảnh thứ i của file cũ chia mảnh
 //
-//   DELETE /api/files?id=<id>        -> xoá object S3 + doc (cần ADMIN_KEY)
+//  THÙNG RÁC (toàn bộ cần ADMIN_KEY):
+//   POST   /api/files?action=trash    body {items:[{id,planId,rowId,fkey,rowName}]}
+//        -> đánh dấu status:"trashed" hàng loạt, KHÔNG đụng object trên S3
+//   GET    /api/files?trash=1&plan=<id>
+//        -> danh sách thùng rác của kế hoạch + dọn bản quá hạn 30 ngày
+//   POST   /api/files?action=restore&id=<id>  -> bỏ cờ trashed
+//   DELETE /api/files?id=<id>                 -> xoá hẳn: object S3 + doc
+//
+//  File trong thùng rác vẫn nằm nguyên chỗ cũ trên S3 — chỉ metadata đổi. Copy
+//  một object 500MB sang prefix khác trong hàm 15 giây là rủi ro không đổi lấy gì.
 //
 //  File CŨ (nguyên khối `data`, hoặc chia mảnh `chunks`) vẫn đọc từ MongoDB —
 //  không migrate, không đụng tới. Đường đọc đó KHÔNG bao giờ chạm tới S3, nên
@@ -27,8 +36,23 @@ const { AwsClient } = require("aws4fetch");
 const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB || "bim";
 const filesCollection = process.env.MONGODB_FILES_COLLECTION || "bim_files";
+// Cùng collection mà api/data.js dùng — thùng rác phải đọc được document kế hoạch
+// để biết file nào vẫn đang được bảng tham chiếu. Hai chỗ phải khớp tên.
+const appCollection = process.env.MONGODB_COLLECTION || "bim_app";
 
-const MAX_UPLOAD = 200 * 1024 * 1024;       // giới hạn 1 file (S3 không giới hạn, đây là chính sách)
+const MAX_UPLOAD = 500 * 1024 * 1024;       // giới hạn 1 file (S3 không giới hạn, đây là chính sách)
+
+// Bốn cột file của một dòng trong document kế hoạch. Phải khớp với hằng FKEYS ở
+// bang-hang-muc.html — thiếu một cột ở đây thì lớp tự chữa lành của thùng rác coi
+// file trong cột đó là rác và vẫn liệt kê nó dù bảng đang dùng.
+const FKEYS = ["files", "filesCad", "filesDuyet", "filesChapThuan"];
+
+const TRASH_TTL = 30 * 24 * 60 * 60 * 1000;   // file nằm thùng rác 30 ngày rồi tự xoá
+// Dọn quá hạn chạy ngay trong request liệt kê thùng rác, mà mỗi lần xoá là một
+// request HTTP tới S3 (~100-300ms). Trần 10 giữ tổng thời gian dưới ~3s, còn xa
+// mức maxDuration 15s trong vercel.json. Phần dư để lần mở sau.
+const TRASH_CLEAN_MAX = 10;
+const TRASH_BATCH_MAX = 500;                  // trần số file cho một lần POST ?action=trash
 
 // ---- phân quyền (giống api/data.js): EDIT_KEY = tải file lên, ADMIN_KEY = thêm quyền xoá ----
 function safeEqual(a, b) {
@@ -57,6 +81,24 @@ async function connectMongo() {
   global.__mongoClient = client;
   global.__mongoDb = db;
   return { client, db };
+}
+
+// Giống hệt readBody ở api/data.js. Vercel đã parse sẵn body JSON trong hầu hết
+// trường hợp, nhưng `vercel dev` và một số runtime giao lại raw string hoặc
+// Buffer — nhánh tự đọc stream là để hai môi trường hành xử như nhau.
+async function readBody(req) {
+  if (req.body != null && typeof req.body === "object" && !Buffer.isBuffer(req.body)) return req.body;
+  let raw = req.body;
+  if (raw == null) {
+    raw = await new Promise((resolve, reject) => {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => resolve(body));
+      req.on("error", reject);
+    });
+  }
+  if (Buffer.isBuffer(raw)) raw = raw.toString("utf8");
+  return JSON.parse(raw);
 }
 
 // ---- Amazon S3 ----
@@ -144,21 +186,31 @@ module.exports = async (req, res) => {
     // Đặt TRƯỚC cả bước kiểm quyền: người dùng cần biết "hãy tải lại trang",
     // không phải "sai mật khẩu".
     //
-    // Bắt theo kiểu "mọi POST KHÔNG phải sign-upload/confirm" chứ không liệt kê
+    // Bắt theo kiểu "mọi POST KHÔNG nằm trong danh sách trắng" chứ không liệt kê
     // action cũ: bản cũ tải file nhỏ (≤3.5MB) bằng POST ?name=&type= KHÔNG có
     // action nào cả — đó là đường tải lên phổ biến nhất, và liệt kê theo tên sẽ
     // bỏ sót đúng nó.
-    const postLaCu = req.method === "POST" && action !== "sign-upload" && action !== "confirm";
+    //
+    // MỖI action POST mới PHẢI được thêm vào đây, nếu không nó chết ở 426 với
+    // thông báo "hãy tải lại trang" — một lỗi trông y hệt lỗi cache và tốn cả
+    // buổi để tìm ra.
+    const ACTION_POST = new Set(["sign-upload", "confirm", "trash", "restore"]);
+    const postLaCu = req.method === "POST" && !ACTION_POST.has(action);
     if (postLaCu || (req.method === "DELETE" && url.searchParams.get("chunks"))) {
       res.status(426).json({ ok: false, error: "Bản web đã cập nhật — hãy tải lại trang (Ctrl+F5)" });
       return;
     }
 
-    // Tải xuống (GET) tự do; tải lên (POST) cần EDIT_KEY; xoá (DELETE) cần ADMIN_KEY
-    if (req.method === "POST" || req.method === "DELETE") {
+    // Tải xuống (GET) tự do; tải lên (POST) cần EDIT_KEY; xoá và thùng rác cần ADMIN_KEY.
+    //
+    // Nút thùng rác ở giao diện bị ẩn khi không phải quản trị, nhưng canAdmin() bên
+    // đó chỉ ẩn nút — ai mở DevTools cũng gọi thẳng được. Hàng rào thật nằm ở đây.
+    const laThungRac = action === "trash" || action === "restore"
+      || (req.method === "GET" && url.searchParams.get("trash"));
+    if (laThungRac || req.method === "POST" || req.method === "DELETE") {
       const role = getRole(req);
-      if (req.method === "DELETE" && role !== "admin") {
-        res.status(401).json({ ok: false, needKey: true, error: "Cần mật khẩu quản trị để xoá file" });
+      if ((laThungRac || req.method === "DELETE") && role !== "admin") {
+        res.status(401).json({ ok: false, needKey: true, error: "Cần mật khẩu quản trị" });
         return;
       }
       if (role !== "admin" && role !== "edit") {
@@ -181,7 +233,7 @@ module.exports = async (req, res) => {
         return;
       }
       if (size > MAX_UPLOAD) {
-        res.status(413).json({ ok: false, error: "File quá lớn (giới hạn 200MB)" });
+        res.status(413).json({ ok: false, error: "File quá lớn (giới hạn 500MB)" });
         return;
       }
 
@@ -192,7 +244,10 @@ module.exports = async (req, res) => {
       // để lại một doc `pending` mồ côi — và retryUp ở client thử 3 lần, còn script
       // dọn thì CỐ Ý không bao giờ đụng tới doc pending. Ký trước thì lỗi xảy ra
       // khi chưa có gì được ghi và chưa ai nhận được URL nào.
-      const uploadUrl = await signS3(key, "PUT", 900);       // 15 phút
+      // 1 giờ. Hạn này là trần thời gian truyền: URL hết hạn giữa chừng thì PUT hỏng
+      // và client KHÔNG tự thử lại. 500MB trong 900s cũ đòi ~4.7 Mbps liên tục — quá
+      // sát với đường lên của mạng văn phòng; 3600s hạ yêu cầu xuống ~1.2 Mbps.
+      const uploadUrl = await signS3(key, "PUT", 3600);
       // Ghi doc `pending` để ràng id ↔ key ↔ người ký một cách nguyên tử, TRƯỚC khi
       // trả URL ra ngoài. Nhờ đó confirm không thể ghi metadata trỏ vào key của
       // người khác (key KHÔNG phải bí mật — nó nằm trong path của mọi URL đã ký),
@@ -216,7 +271,7 @@ module.exports = async (req, res) => {
       }
       // Idempotent: retryUp ở client bọc lời gọi này, nên khi lần đầu thành công mà
       // response mất (cold start, Wi-Fi đổi sang 4G) thì lần thử lại phải trả 200 y hệt.
-      // Không có nhánh này thì client thấy ok=false → save() không chạy → file 200MB
+      // Không có nhánh này thì client thấy ok=false → save() không chạy → file 500MB
       // nằm trong S3 mà không dòng nào trỏ tới, còn người dùng bị báo là thất bại.
       if (doc.status === "ready") {
         res.status(200).json({ ok: true, file: fileOf(doc) });
@@ -230,7 +285,7 @@ module.exports = async (req, res) => {
       // Ký RIÊNG cho HEAD — ký cho GET rồi gọi HEAD sẽ sai chữ ký.
       // Timeout 5s: confirm giờ có lời gọi ra ngoài trong một serverless invocation.
       // HEAD treo sẽ ăn hết budget và Vercel trả HTML lỗi, mà apiJson ở client biến
-      // nó thành "máy chủ trả lỗi HTTP 504" — sau khi 200MB đã truyền xong.
+      // nó thành "máy chủ trả lỗi HTTP 504" — sau khi 500MB đã truyền xong.
       let head;
       try {
         head = await fetch(await signS3(key, "HEAD", 300), {
@@ -270,7 +325,7 @@ module.exports = async (req, res) => {
         try { await fetch(await signS3(key, "DELETE", 300), { method: "DELETE", signal: AbortSignal.timeout(5000) }); }
         catch (e) { console.error("confirm: khong xoa duoc object qua lon", e); }
         await col.deleteOne({ _id: id, status: "pending" });
-        res.status(413).json({ ok: false, error: "File quá lớn (giới hạn 200MB)" });
+        res.status(413).json({ ok: false, error: "File quá lớn (giới hạn 500MB)" });
         return;
       }
 
@@ -296,15 +351,159 @@ module.exports = async (req, res) => {
       return;
     }
 
+    // ---- Thùng rác: chuyển file vào ----
+    // Nhận cả mẻ trong MỘT request: xoá 20 dòng × 3 file là 60 request nếu làm lẻ.
+    if (req.method === "POST" && action === "trash") {
+      let body;
+      try { body = await readBody(req); }
+      catch (e) { res.status(400).json({ ok: false, error: "Body không phải JSON hợp lệ" }); return; }
+      const items = Array.isArray(body) ? body : (body && Array.isArray(body.items) ? body.items : null);
+      if (!items || !items.length) { res.status(400).json({ ok: false, error: "Thiếu danh sách file" }); return; }
+      if (items.length > TRASH_BATCH_MAX) {
+        res.status(413).json({ ok: false, error: "Quá nhiều file trong một lần (tối đa " + TRASH_BATCH_MAX + ")" });
+        return;
+      }
+
+      const now = Date.now();
+      const ops = [];
+      for (const it of items) {
+        if (!it || !it.id) continue;
+        ops.push({
+          updateOne: {
+            // Loại trừ `pending`: đó là phiên tải lên ĐANG CHẠY. Đụng vào thì
+            // confirm sẽ thấy status lạ và báo "phiên tải lên không hợp lệ" —
+            // người dùng mất file vừa tải xong mà không hiểu vì sao.
+            filter: { _id: String(it.id), status: { $ne: "pending" } },
+            update: {
+              $set: {
+                status: "trashed",
+                trashedAt: now,
+                // rowName lưu lại để thùng rác còn nói được "từ dòng: Móng M1"
+                // kể cả khi dòng đó đã biến mất khỏi bảng.
+                //
+                // uploadedAt và note KHÔNG có ở đâu khác: chúng sống trong document
+                // kế hoạch, và document đó vừa bị gỡ mất mục này. Không chép sang
+                // đây thì khôi phục xong cột "Thời gian trình" trống trơn (hoặc tệ
+                // hơn: hiện ngày XOÁ) và ghi chú của file bay mất.
+                origin: {
+                  planId: String(it.planId || ""),
+                  rowId: String(it.rowId || ""),
+                  fkey: String(it.fkey || "files"),
+                  rowName: String(it.rowName || "").slice(0, 200),
+                  uploadedAt: String(it.uploadedAt || ""),
+                  note: String(it.note || "").slice(0, 4000),
+                  viTri: Number(it.viTri) >= 0 ? Number(it.viTri) : 0,
+                },
+              },
+            },
+          },
+        });
+      }
+      if (!ops.length) { res.status(400).json({ ok: false, error: "Không có id hợp lệ" }); return; }
+      // ordered:false — một id đã bị xoá hẳn từ tab khác không được làm hỏng cả mẻ.
+      const kq = await col.bulkWrite(ops, { ordered: false });
+      res.status(200).json({ ok: true, trashed: kq.modifiedCount || 0, sent: ops.length });
+      return;
+    }
+
+    // ---- Thùng rác: khôi phục ----
+    if (req.method === "POST" && action === "restore") {
+      if (!id) { res.status(400).json({ ok: false, error: "Thiếu id" }); return; }
+      const doc = await col.findOne({ _id: id }, { projection: { status: 1, key: 1 } });
+      if (!doc) { res.status(404).json({ ok: false, error: "File không còn trong thùng rác" }); return; }
+      // Idempotent: client gọi lại sau khi mất response thì vẫn phải trả 200.
+      if (doc.status !== "trashed") { res.status(200).json({ ok: true }); return; }
+      // File CŨ (nằm trong MongoDB) vốn KHÔNG có trường status. Trả nó về đúng
+      // trạng thái không-có-status thay vì đặt "ready" — script dọn có đọc trường
+      // này và một giá trị bịa ra sẽ làm báo cáo sai.
+      const update = doc.key
+        ? { $set: { status: "ready" }, $unset: { trashedAt: "", origin: "" } }
+        : { $unset: { status: "", trashedAt: "", origin: "" } };
+      await col.updateOne({ _id: id }, update);
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    // ---- Thùng rác: liệt kê (kèm dọn bản quá hạn) ----
+    if (req.method === "GET" && url.searchParams.get("trash")) {
+      const planId = url.searchParams.get("plan") || "data";
+
+      // 1. Dọn quá hạn. Quét TOÀN CỤC chứ không theo kế hoạch: rác của kế hoạch đã
+      //    bị xoá cũng phải được dọn, mà sẽ không còn ai mở thùng rác của nó nữa.
+      const hetHan = await col.find(
+        { status: "trashed", trashedAt: { $lt: Date.now() - TRASH_TTL } },
+        { projection: { key: 1, chunks: 1 }, limit: TRASH_CLEAN_MAX }
+      ).toArray();
+      for (const d of hetHan) await xoaVinhVien(col, d);
+
+      // 2. File nào vẫn đang được bảng tham chiếu thì KHÔNG phải rác. Đây là lớp
+      //    tự chữa lành: nếu save() xong mà bước restore hỏng giữa chừng, file sẽ
+      //    tự biến khỏi thùng rác ở lần mở sau thay vì nằm lại gây hoang mang.
+      const planDoc = await db.collection(appCollection)
+        .findOne({ _id: planId }, { projection: { data: 1 } });
+      const dangDung = new Set();
+      const rows = (planDoc && planDoc.data && Array.isArray(planDoc.data.rows)) ? planDoc.data.rows : [];
+      for (const row of rows) {
+        for (const fk of FKEYS) {
+          const arr = row && row[fk];
+          if (Array.isArray(arr)) for (const f of arr) if (f && f.id) dangDung.add(String(f.id));
+        }
+      }
+
+      const docs = await col.find(
+        { status: "trashed", "origin.planId": planId },
+        { projection: { name: 1, size: 1, type: 1, trashedAt: 1, origin: 1, key: 1 }, limit: 500 }
+      ).sort({ trashedAt: -1 }).toArray();
+
+      const items = [];
+      for (const d of docs) {
+        if (dangDung.has(String(d._id))) continue;
+        const o = d.origin || {};
+        items.push({
+          id: d._id,
+          name: d.name || "file",
+          size: d.size || 0,
+          type: d.type || "application/octet-stream",
+          url: "api/files?id=" + d._id,
+          trashedAt: d.trashedAt || 0,
+          expiresAt: (d.trashedAt || 0) + TRASH_TTL,
+          rowId: o.rowId || "",
+          rowName: o.rowName || "",
+          fkey: o.fkey || "files",
+          // Ba trường để khôi phục file về đúng chỗ cũ, đúng mốc thời gian cũ.
+          uploadedAt: o.uploadedAt || "",
+          note: o.note || "",
+          viTri: typeof o.viTri === "number" ? o.viTri : 0,
+          // File cũ nằm trong MongoDB không có key nên không xin được URL ký —
+          // client phải tải nó theo đường khác.
+          onS3: !!d.key,
+        });
+      }
+      res.status(200).json({
+        ok: true, items,
+        ttlDays: Math.round(TRASH_TTL / 86400000),
+        cleaned: hetHan.length,
+      });
+      return;
+    }
+
     // ---- Tải file xuống ----
     if (req.method === "GET") {
       if (!id) { res.status(400).json({ ok: false, error: "Thiếu id" }); return; }
       const doc = await col.findOne({ _id: id });
       if (!doc) { res.status(404).json({ ok: false, error: "Không tìm thấy file" }); return; }
 
+      // File đã vào thùng rác thì không còn tải tự do được nữa — nó đã bị gỡ khỏi
+      // bảng, ai biết id vẫn tải được thì việc xoá chẳng có nghĩa gì. Quản trị vẫn
+      // tải được, vì đó chính là đường sao lưu trước khi xoá vĩnh viễn.
+      if (doc.status === "trashed" && getRole(req) !== "admin") {
+        res.status(404).json({ ok: false, error: "Không tìm thấy file" });
+        return;
+      }
+
       // ---- FILE MỚI: chuyển hướng thẳng sang S3 ----
       if (doc.key) {
-        if (doc.status !== "ready") {
+        if (doc.status !== "ready" && doc.status !== "trashed") {
           // doc pending = phiên tải lên chưa xong, chưa phải một file
           res.status(404).json({ ok: false, error: "Không tìm thấy file" });
           return;
@@ -316,8 +515,19 @@ module.exports = async (req, res) => {
         //
         // Tên file và MIME KHÔNG cần tham số response-* — chúng đã nằm sẵn trên object
         // (client gắn Content-Disposition + Content-Type lúc PUT).
+        const urlKy = await signS3(doc.key, "GET", 300);
         res.setHeader("Cache-Control", "private, no-store");
-        res.setHeader("Location", await signS3(doc.key, "GET", 300));
+
+        // ?signed=1 → trả URL đã ký dạng JSON thay vì chuyển hướng.
+        // Cần cho việc tải file trong thùng rác: file đó đòi header x-edit-key, mà
+        // thẻ <a> và window.open không gửi header được. Client xin URL kèm header
+        // rồi mở thẳng URL đó. Cách này cũng tránh được CORS của bucket, thứ mà
+        // fetch() sẽ vướng còn điều hướng của trình duyệt thì không.
+        if (url.searchParams.get("signed")) {
+          res.status(200).json({ ok: true, url: urlKy, name: doc.name || "file" });
+          return;
+        }
+        res.setHeader("Location", urlKy);
         res.status(302).end();
         return;
       }
@@ -376,25 +586,18 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // ---- Xoá file (object S3 hoặc mọi mảnh trong MongoDB) ----
+    // ---- Xoá vĩnh viễn (object S3 hoặc mọi mảnh trong MongoDB) ----
+    // Giao diện chỉ gọi đường này từ trong thùng rác. Xoá file ở bảng đi qua
+    // ?action=trash. Nhưng tab đang mở bản HTML cũ vẫn gọi thẳng vào đây, nên
+    // hành vi phải giữ nguyên: xoá là mất hẳn.
     if (req.method === "DELETE") {
       if (!id) { res.status(400).json({ ok: false, error: "Thiếu id" }); return; }
       const doc = await col.findOne({ _id: id }, { projection: { key: 1, chunks: 1 } });
-      // Giữ guard này: removeFile ở client gọi DELETE kiểu bắn-rồi-quên, nên xoá
-      // cùng một file hai lần là chuyện bình thường (hai tab, hoặc hai người trên
-      // một dòng đang đồng bộ). Bỏ đi thì lần thứ hai ném lỗi → 500 thay vì 200 êm ả.
+      // Giữ guard này: bản HTML cũ gọi DELETE kiểu bắn-rồi-quên, nên xoá cùng một
+      // file hai lần là chuyện bình thường (hai tab, hoặc hai người trên một dòng
+      // đang đồng bộ). Bỏ đi thì lần thứ hai ném lỗi → 500 thay vì 200 êm ả.
       if (!doc) { res.status(200).json({ ok: true }); return; }
-
-      if (doc.key) {
-        // Xoá object hỏng thì VẪN xoá metadata và trả ok — metadata trỏ vào hư không
-        // tệ hơn một file mồ côi. Ghi log để còn dấu vết cho script dọn.
-        try { await fetch(await signS3(doc.key, "DELETE", 300), { method: "DELETE", signal: AbortSignal.timeout(5000) }); }
-        catch (e) { console.error("DELETE: khong xoa duoc object S3 " + doc.key, e); }
-      }
-      if (Array.isArray(doc.chunks) && doc.chunks.length) {
-        await col.deleteMany({ _id: { $in: doc.chunks } });
-      }
-      await col.deleteOne({ _id: id });
+      await xoaVinhVien(col, doc);
       res.status(200).json({ ok: true });
       return;
     }
@@ -417,4 +620,26 @@ function fileOf(doc) {
     type: doc.type || "application/octet-stream",
     url: "api/files?id=" + doc._id,
   };
+}
+
+// Xoá hẳn một file: object trên S3 (nếu có), mọi mảnh trong MongoDB (file cũ),
+// rồi chính doc. Dùng chung cho DELETE và cho việc dọn bản quá hạn 30 ngày —
+// hai đường đó phải xoá y hệt nhau, tách ra là sớm muộn cũng lệch.
+async function xoaVinhVien(col, doc) {
+  if (doc.key) {
+    // Xoá object hỏng thì VẪN xoá metadata và coi như xong — metadata trỏ vào hư
+    // không tệ hơn một object mồ côi. Ghi log để script dọn còn có dấu vết.
+    try {
+      await fetch(await signS3(doc.key, "DELETE", 300), {
+        method: "DELETE",
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (e) {
+      console.error("xoaVinhVien: khong xoa duoc object S3 " + doc.key, e);
+    }
+  }
+  if (Array.isArray(doc.chunks) && doc.chunks.length) {
+    await col.deleteMany({ _id: { $in: doc.chunks } });
+  }
+  await col.deleteOne({ _id: doc._id });
 }

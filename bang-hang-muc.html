@@ -326,6 +326,14 @@
   .td-files { vertical-align: top; }
 
 
+  /* Dòng phụ trong tiêu đề cột: "File đang trình" tách làm hai cột con PDF và
+     DWG+Excel. Làm bằng nhãn hai dòng chứ không phải thead hai tầng — hàng th
+     thứ hai sẽ phá initColGrips (nó ghép th thứ i với COLUMNS[i]) và cả phần
+     sticky header. */
+  .th-sub {
+    display: block; margin-top: 2px;
+    font-weight: 500; font-size: .72rem; color: var(--text-dim); letter-spacing: .01em;
+  }
   .td-time { vertical-align: top; }
   /* cùng padding-top + gap + chiều cao dòng với .files-list → mốc thời gian nằm ngang hàng file tương ứng */
   .time-cell { padding: 5px 6px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
@@ -490,6 +498,44 @@
   }
   .modal-cancel:hover { background: var(--surface-2); }
   .modal-done--danger { background: var(--danger); }
+
+  /* ---------- Thùng rác ---------- */
+  .modal--lg { width: 700px; }
+  .trash-info { margin: 0 0 10px; font-size: .78rem; color: var(--text-dim); line-height: 1.5; }
+  .trash-list { display: flex; flex-direction: column; gap: 7px; }
+  .trash-empty { color: var(--text-dim); font-size: .85rem; padding: 18px 4px; text-align: center; }
+  .trash-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2);
+  }
+  .trash-main { flex: 1 1 auto; min-width: 0; }
+  .trash-name {
+    font-size: .84rem; color: var(--text-hi); font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .trash-meta { font-size: .72rem; color: var(--text-dim); margin-top: 2px; }
+  .trash-meta .trash-soon { color: var(--danger); font-weight: 650; }
+  .trash-acts { display: flex; gap: 6px; flex: none; }
+  .trash-act {
+    padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer;
+    background: var(--surface); color: var(--text); font-family: var(--ff-sans); font-size: .76rem; font-weight: 600;
+  }
+  .trash-act:hover { background: var(--surface-2); border-color: var(--accent); color: var(--accent); }
+  .trash-act--danger:hover { border-color: var(--danger); color: var(--danger); }
+  .trash-act[disabled] { opacity: .45; cursor: not-allowed; }
+  .trash-act[disabled]:hover { background: var(--surface); border-color: var(--border); color: var(--text); }
+  .trash-foot-acts { display: flex; gap: 8px; flex: none; }
+  /* tiến độ tải hàng loạt: chiếm chỗ chân hộp, thay cho phần gợi ý */
+  .trash-prog { font-size: .78rem; color: var(--text-mid); }
+
+  /* hộp chọn dòng đích khi dòng gốc đã bị xoá */
+  .pick-lead { margin: 0 0 10px; font-size: .84rem; color: var(--text-hi); }
+  .pick-field { display: block; margin-bottom: 10px; font-size: .78rem; color: var(--text-mid); }
+  .pick-field select {
+    display: block; width: 100%; margin-top: 4px; height: 34px; padding: 0 8px;
+    border-radius: 7px; border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text-hi); font-family: var(--ff-sans); font-size: .84rem;
+  }
 
   /* ---------- Co giãn & ẩn/hiện cột, dòng ---------- */
   /* tay kéo bề rộng cột: nằm đè lên viền phải của ô tiêu đề */
@@ -798,6 +844,10 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>
         <span class="label">Xóa</span><span class="pill" id="selPill">0</span>
       </button>
+      <button id="btnTrash" class="btn btn--ghost" type="button" title="Thùng rác — file đã xoá, giữ 30 ngày rồi tự mất" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M12 11v6"/><path d="M9 14l3-3 3 3"/></svg>
+        <span class="label">Thùng rác</span>
+      </button>
       <button id="btnAuthApp" class="btn btn--ghost auth-btn" type="button" hidden></button>
     </div>
   </header>
@@ -833,10 +883,10 @@
               <input class="colfilter" data-col="tinhTrang" type="text" placeholder="Lọc cột…" aria-label="Lọc theo Tình trạng hồ sơ">
             </th>
             <th class="col-files">
-              <div class="th-label">File đang trình</div>
+              <div class="th-label">File đang trình<span class="th-sub">PDF</span></div>
             </th>
-            <th class="col-time">
-              <div class="th-label">Thời gian</div>
+            <th class="col-files">
+              <div class="th-label">File đang trình<span class="th-sub">DWG + Excel</span></div>
             </th>
             <th class="col-note">
               <div class="th-label">Ghi chú</div>
@@ -845,14 +895,8 @@
             <th class="col-files">
               <div class="th-label">File đã duyệt</div>
             </th>
-            <th class="col-time">
-              <div class="th-label">Thời gian</div>
-            </th>
             <th class="col-files">
               <div class="th-label">Hồ sơ chấp thuận</div>
-            </th>
-            <th class="col-time">
-              <div class="th-label">Thời gian</div>
             </th>
           </tr>
         </thead>
@@ -897,7 +941,13 @@
     { key: "tienDo",    ph: "vd: 01/08 – 20/08/2026",  type: "rich" },
     { key: "tinhTrang", ph: "Chọn tình trạng…",         type: "status" }
   ];
-  var HEADERS = ["STT", "Hạng mục", "Thông tin chi tiết", "Người làm", "Tiến độ kế hoạch", "Tình trạng hồ sơ", "File đang trình", "Thời gian trình", "Ghi chú", "File đã duyệt", "Thời gian duyệt", "Hồ sơ chấp thuận", "Thời gian chấp thuận"];
+  // CSV VẪN giữ cột thời gian dù bảng đã bỏ: trên bảng, mốc tải lên xem được qua
+  // tooltip của file, còn trong file CSV thì không có tooltip nào cả — đây là nơi
+  // duy nhất còn mang được mốc thời gian ra ngoài.
+  var HEADERS = ["STT", "Hạng mục", "Thông tin chi tiết", "Người làm", "Tiến độ kế hoạch", "Tình trạng hồ sơ",
+    "File đang trình (PDF)", "Thời gian trình (PDF)",
+    "File đang trình (DWG+Excel)", "Thời gian trình (DWG+Excel)",
+    "Ghi chú", "File đã duyệt", "Thời gian duyệt", "Hồ sơ chấp thuận", "Thời gian chấp thuận"];
 
   function uid() { return "r" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36); }
 
@@ -1016,6 +1066,14 @@
     document.body.classList.toggle("no-admin", !canAdmin());
     if (viewStyle) { closeViewPop(); applyView(); if (state.rows.length) render(); }
     updateAuthButtons();
+    capNhatNutThungRac();
+  }
+  // Nút thùng rác chỉ có nghĩa khi đủ ba điều: đang ở chế độ máy chủ, có quyền quản
+  // trị, và đang mở một kế hoạch (thùng rác gom theo kế hoạch). Gọi lại ở mọi chỗ
+  // ba điều đó có thể đổi: đăng nhập/đăng xuất, mở kế hoạch, quay về danh sách.
+  function capNhatNutThungRac() {
+    var b = document.getElementById("btnTrash");
+    if (b) b.hidden = !(laMayChu() && canAdmin() && state.planId);
   }
   function updateAuthButtons() {
     ["btnAuthPlan", "btnAuthApp"].forEach(function (bid) {
@@ -1406,7 +1464,7 @@
   // ================= File đính kèm =================
   // File tải thẳng lên Amazon S3 nên không còn vướng giới hạn body ~4.5MB của
   // Vercel lẫn giới hạn 16MB/document của MongoDB — không cần cắt mảnh nữa.
-  var MAX_UPLOAD = 200 * 1024 * 1024;  // giới hạn 1 file khi lưu lên máy chủ
+  var MAX_UPLOAD = 500 * 1024 * 1024;  // giới hạn 1 file khi lưu lên máy chủ
   function fmtSize(n) {
     n = Number(n) || 0;
     if (n < 1024) return n + " B";
@@ -1477,6 +1535,12 @@
     if (f.size) t += " (" + fmtSize(f.size) + ")";
     return t + "\nBấm để tải xuống";
   }
+  // BỐN cột file của một dòng. Mọi chỗ cần duyệt hết file của một dòng đều phải
+  // dùng hằng này — trước đây danh sách ba cột được chép tay ở sáu chỗ, và thêm
+  // cột thứ tư đã suýt bỏ sót vài chỗ trong số đó.
+  // `filesCad` thêm 09/2026 khi "File đang trình" tách làm hai cột con.
+  var FKEYS = ["files", "filesCad", "filesDuyet", "filesChapThuan"];
+
   function makeFilesTd(row, fkey) {
     var td = document.createElement("td");
     td.className = "td-files";
@@ -1527,45 +1591,22 @@
     return td;
   }
 
-  // ---- Cột "Thời gian": mốc tải lên của từng file, xếp thẳng hàng với cột file liền trước ----
-  // "dd/mm/yy hh:mm" — đủ gọn cho cột hẹp; xem đầy đủ tới giây ở tooltip
-  function fmtUploadShort(v) {
-    if (!v) return "";
-    var d = new Date(v);
-    if (isNaN(d.getTime())) return "";
-    function p(n) { return n < 10 ? "0" + n : String(n); }
-    return p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + String(d.getFullYear()).slice(-2) +
-      " " + p(d.getHours()) + ":" + p(d.getMinutes());
-  }
-  function makeTimeTd(row, fkey) {
-    var td = document.createElement("td");
-    td.className = "td-time";
-    td.setAttribute("data-ck", TIME_CK[fkey] || "timeFiles");
-    var cell = document.createElement("div");
-    cell.className = "time-cell";
-    (Array.isArray(row[fkey]) ? row[fkey] : []).forEach(function (f) {
-      var item = document.createElement("span");
-      var short = fmtUploadShort(f.uploadedAt);
-      if (short) {
-        item.className = "time-item";
-        item.textContent = short;
-        item.setAttribute("title", "Tải lên: " + fmtUploadTime(f.uploadedAt) + "\n" + (f.name || "file"));
-      } else {
-        item.className = "time-item is-empty";   // file tải lên trước khi có mốc thời gian
-        item.textContent = "—";
-        item.setAttribute("title", (f.name || "file") + "\nFile cũ — chưa lưu mốc thời gian");
-      }
-      cell.appendChild(item);
-    });
-    td.appendChild(cell);
-    return td;
-  }
-  // Ghi chú: MỖI FILE một dòng riêng, xếp thẳng hàng với cột File và cột Thời gian bên trái;
+  // Ba cột "Thời gian" đã bỏ (09/2026): mốc tải lên vốn đã nằm trong tooltip của
+  // chính file (xem fileTooltip), nên ba cột riêng chỉ chiếm chỗ mà không nói thêm
+  // được gì. Bảng hẹp lại 336px.
+
+  // Ghi chú: MỖI FILE một dòng riêng, xếp thẳng hàng với cột File bên trái;
   // dưới cùng thêm một dòng ghi chú chung cho cả hàng, thẳng hàng với nút "+ File".
   // Ghi chú của file nằm ngay trong chính file đó (f.note) nên xoá file là ghi chú đi theo.
+  // Tìm trong CẢ BỐN cột file, không riêng row.files. Ghi chú giờ hiện cho cả hai
+  // cột "File đang trình", và một file bất kỳ cũng có thể được tra ngược từ đây.
   function fileByUid(row, key) {
-    var a = Array.isArray(row.files) ? row.files : [];
-    for (var i = 0; i < a.length; i++) if (String(a[i].uid || a[i].id || "") === String(key)) return a[i];
+    for (var k = 0; k < FKEYS.length; k++) {
+      var a = Array.isArray(row[FKEYS[k]]) ? row[FKEYS[k]] : [];
+      for (var i = 0; i < a.length; i++) {
+        if (String(a[i].uid || a[i].id || "") === String(key)) return a[i];
+      }
+    }
     return null;
   }
   function makeNoteLine(rowId, key, ph, html, title) {
@@ -1591,9 +1632,14 @@
 
     var list = document.createElement("div");
     list.className = "note-list";
-    (Array.isArray(row.files) ? row.files : []).forEach(function (f) {
-      list.appendChild(makeNoteLine(row.id, "note:" + (f.uid || f.id || ""),
-        "Ghi chú cho file…", f.note, f.name || "file"));
+    // Ghi chú cho cả hai cột "File đang trình" (PDF rồi DWG+Excel), theo đúng thứ
+    // tự hai cột đó xuất hiện bên trái. Hai cột file phía sau — "đã duyệt" và
+    // "chấp thuận" — không có ghi chú riêng, giữ nguyên như trước.
+    ["files", "filesCad"].forEach(function (fk) {
+      (Array.isArray(row[fk]) ? row[fk] : []).forEach(function (f) {
+        list.appendChild(makeNoteLine(row.id, "note:" + (f.uid || f.id || ""),
+          "Ghi chú cho file…", f.note, f.name || "file"));
+      });
     });
     cell.appendChild(list);
 
@@ -1607,8 +1653,15 @@
   // CSV: tên file và mốc thời gian giữ nguyên thứ tự để đối chiếu được với nhau
   function fileNamesCsv(a) { return (Array.isArray(a) ? a : []).map(function (f) { return f.name || ""; }).join("; "); }
   // ghi chú của từng file, cùng thứ tự với tên file; ghi chú chung của cả dòng xếp sau cùng
+  // Cùng thứ tự với cột Ghi chú trên bảng: PDF trước, DWG+Excel sau, ghi chú
+  // chung của cả dòng xếp cuối.
   function notesCsv(row) {
-    var out = (Array.isArray(row.files) ? row.files : []).map(function (f) { return htmlToText(f.note || "").trim(); });
+    var out = [];
+    ["files", "filesCad"].forEach(function (fk) {
+      (Array.isArray(row[fk]) ? row[fk] : []).forEach(function (f) {
+        out.push(htmlToText(f.note || "").trim());
+      });
+    });
     var rn = htmlToText(row.ghiChu || "").trim();
     if (rn) out.push(rn);
     return out.join("; ");
@@ -1616,7 +1669,9 @@
   // gộp mọi ghi chú của một dòng để phục vụ tìm kiếm và lọc cột
   function notesText(row) {
     var t = htmlToText(row.ghiChu || "");
-    (Array.isArray(row.files) ? row.files : []).forEach(function (f) { t += " " + htmlToText(f.note || ""); });
+    FKEYS.forEach(function (fk) {
+      (Array.isArray(row[fk]) ? row[fk] : []).forEach(function (f) { t += " " + htmlToText(f.note || ""); });
+    });
     return t;
   }
   function fileTimesCsv(a) { return (Array.isArray(a) ? a : []).map(function (f) { return fmtUploadTime(f.uploadedAt) || "—"; }).join("; "); }
@@ -1679,7 +1734,7 @@
         xhr.send(proc.blob);
       });
     }).then(function (s) {
-      // retryUp bọc sign và confirm nhưng KHÔNG bọc PUT — không tự thử lại 200MB.
+      // retryUp bọc sign và confirm nhưng KHÔNG bọc PUT — không tự thử lại 500MB.
       // Bọc confirm chỉ an toàn vì máy chủ đã làm nó idempotent.
       return retryUp(function () {
         return fetch("api/files?action=confirm&id=" + encodeURIComponent(s.id)
@@ -1739,7 +1794,7 @@
       if (!j || !j.ok || !j.file) { toast((j && j.error) || "Tải lên thất bại"); return; }
       // filesBusy CHỈ bật ở đây — từ lúc file đã nằm trên kho cho tới sau save().
       // KHÔNG bật trước khi PUT: PUT đi thẳng sang S3, không đụng máy chủ của mình,
-      // nên không có lý do gì dừng đồng bộ. Bật sớm thì với 200MB × 3 file state.rows
+      // nên không có lý do gì dừng đồng bộ. Bật sớm thì với 500MB × 3 file state.rows
       // đứng yên hàng chục phút, rồi save() đẩy nguyên document lên và xoá sạch mọi
       // sửa của người khác trong khoảng đó — im lặng, sau một thông báo xanh.
       // Qua khỏi save(), cờ savePending mới là thứ chặn đồng bộ suốt 250ms chờ đẩy.
@@ -1773,7 +1828,7 @@
             return uploadDirect(proc, function (r) { setUploadProgress(rowId, fkey, r); }).then(attach);
           });
         } else {
-          if (file.size > 8 * 1024 * 1024) { toast("“" + file.name + "” quá lớn cho chế độ lưu cục bộ (tối đa 8MB — dùng máy chủ để được 200MB)"); return; }
+          if (file.size > 8 * 1024 * 1024) { toast("“" + file.name + "” quá lớn cho chế độ lưu cục bộ (tối đa 8MB — dùng máy chủ để được 500MB)"); return; }
           return readAsDataURL(file).then(function (dataUrl) {
             var lrow = findRow(rowId);
             if (!lrow) { toast("Dòng đã bị xoá trong lúc tải — file không được gắn"); return; }
@@ -1796,21 +1851,131 @@
     });
   }
 
+  function laMayChu() { return SERVER_MODE && storageMode === "server"; }
+  function tenDong(row) { return (row && htmlToText(row.hangMuc).trim()) || "(dòng trống)"; }
+
+  // Chuyển một mẻ file vào thùng rác. Cả mẻ đi trong MỘT request: xoá 20 dòng ×
+  // 3 file mà bắn lẻ là 60 request.
+  //
+  // KHÔNG dùng kiểu bắn-rồi-quên như bản cũ. Trước đây thất bại chỉ để lại một
+  // object mồ côi trên S3 mà không ai biết; giờ nó để lại file KHÔNG nằm trong
+  // bảng và cũng KHÔNG nằm trong thùng rác — người dùng tưởng khôi phục được.
+  // Hồ sơ một file đem vứt. Ngoài chỗ nó từng nằm, phải mang theo cả `uploadedAt`
+  // và `note` — hai thứ KHÔNG có ở đâu khác. `uploadedAt` là nội dung cột "Thời
+  // gian trình/duyệt/chấp thuận", còn `note` là ghi chú riêng của file; mất là
+  // mất hẳn, vì trong bim_files không lưu chúng.
+  // `viTri` là chỗ dự phòng khi file không có `uploadedAt` (file tải lên trước
+  // 09/2026) — lúc đó không sắp theo thời gian được, đành nhớ chỗ đứng.
+  function hoSoRac(f, rowId, fkey, rowName, viTri) {
+    return {
+      id: f.id, rowId: rowId, fkey: fkey, rowName: rowName,
+      uploadedAt: f.uploadedAt || "", note: f.note || "",
+      viTri: viTri >= 0 ? viTri : 0,
+    };
+  }
+
+  function trashFiles(items) {
+    if (!items.length) return Promise.resolve({ ok: true, trashed: 0 });
+    // Máy chủ chặn ở 500 file mỗi lần. Xoá một nhánh lớn có thể vượt, nên tự chia
+    // mẻ ở đây — để người dùng nhận 413 sau khi dòng đã biến khỏi bảng thì file
+    // nằm lại trên kho lưu trữ mà không đường nào tìm ra.
+    if (items.length > 400) {
+      return trashFiles(items.slice(0, 400)).then(function () { return trashFiles(items.slice(400)); });
+    }
+    return retryUp(function () {
+      return fetch("api/files?action=trash", {
+        method: "POST",
+        headers: authHeaders({ "content-type": "application/json" }),
+        body: JSON.stringify({
+          items: items.map(function (x) {
+            return {
+              id: x.id, planId: state.planId,
+              rowId: x.rowId || "", fkey: x.fkey || "files", rowName: x.rowName || "",
+              uploadedAt: x.uploadedAt || "", note: x.note || "", viTri: x.viTri || 0,
+            };
+          }),
+        }),
+      }).then(apiJson).then(function (j) {
+        if (!j || !j.ok) throw new Error((j && j.error) || "máy chủ từ chối");
+        return j;
+      });
+    }, 3);
+  }
+
+  // ---- xác nhận trước khi xoá 1 file ----
+  // Câu chữ đổi theo chế độ: ở máy chủ, xoá = chuyển vào thùng rác, khôi phục được
+  // trong 30 ngày. Ở chế độ lưu cục bộ KHÔNG có thùng rác nên xoá là mất hẳn. Nói
+  // "vào thùng rác" ở chế độ cục bộ là làm người dùng yên tâm nhầm.
+  var fileDelModal = document.createElement("div");
+  fileDelModal.className = "modal-overlay";
+  fileDelModal.innerHTML =
+    '<div class="modal modal--sm">' +
+      '<div class="modal-head"><h3 class="fdel-title">Xoá file</h3><button class="modal-close" type="button" aria-label="Đóng">×</button></div>' +
+      '<div class="modal-body"><p class="del-lead fdel-lead"></p><ul class="del-list"><li class="fdel-name"></li></ul>' +
+        '<p class="del-files fdel-note"></p></div>' +
+      '<div class="modal-foot"><span class="modal-hint fdel-hint"></span>' +
+        '<span class="del-actions"><button class="modal-cancel" type="button">Huỷ</button>' +
+        '<button class="modal-done modal-done--danger fdel-ok" type="button">Xoá</button></span>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(fileDelModal);
+  var pendingFileDel = null;
+
+  function closeFileDel() { fileDelModal.classList.remove("show"); pendingFileDel = null; }
+
   function removeFile(rowId, fkey, key) {
     if (!canAdmin()) { toast("Chỉ quản trị mới được xoá file"); return; }
     var row = findRow(rowId);
     if (!row || !Array.isArray(row[fkey])) return;
-    var removed = null;
-    row[fkey] = row[fkey].filter(function (f) {
-      var k = f.uid || f.id || "";
-      if (String(k) === String(key)) { removed = f; return false; }
+    var target = null;
+    row[fkey].forEach(function (f) {
+      if (String(f.uid || f.id || "") === String(key)) target = f;
+    });
+    if (!target) return;
+
+    pendingFileDel = { rowId: rowId, fkey: fkey, key: key, name: target.name || "file" };
+    var vaoThung = laMayChu();
+    fileDelModal.querySelector(".fdel-title").textContent = vaoThung ? "Chuyển vào thùng rác" : "Xoá file";
+    fileDelModal.querySelector(".fdel-lead").textContent = vaoThung
+      ? "Gỡ file này khỏi bảng và chuyển vào thùng rác:"
+      : "Xoá hẳn file này khỏi bảng:";
+    fileDelModal.querySelector(".fdel-name").textContent =
+      target.name + (target.size ? "  (" + fmtSize(target.size) + ")" : "");
+    fileDelModal.querySelector(".fdel-note").textContent = vaoThung
+      ? "" : "File lưu trên máy này nên xoá là mất hẳn.";
+    fileDelModal.querySelector(".fdel-hint").textContent = vaoThung
+      ? "Khôi phục được trong 30 ngày." : "Không thể hoàn tác.";
+    fileDelModal.querySelector(".fdel-ok").textContent = vaoThung ? "Vào thùng rác" : "Xoá";
+    fileDelModal.classList.add("show");
+    fileDelModal.querySelector(".modal-cancel").focus();   // đứng ở Huỷ, tránh Enter lỡ tay
+  }
+
+  function doRemoveFile() {
+    if (!pendingFileDel) return;
+    var p = pendingFileDel;
+    closeFileDel();
+    var row = findRow(p.rowId);
+    if (!row || !Array.isArray(row[p.fkey])) return;
+    var removed = null, viTri = -1;
+    row[p.fkey] = row[p.fkey].filter(function (f, i) {
+      if (String(f.uid || f.id || "") === String(p.key)) { removed = f; viTri = i; return false; }
       return true;
     });
-    if (removed && removed.id && SERVER_MODE && storageMode === "server") {
-      fetch("api/files?id=" + encodeURIComponent(removed.id), { method: "DELETE", headers: authHeaders() }).catch(function () {});
-    }
     save(); render();
+    if (!removed || !removed.id || !laMayChu()) return;
+    trashFiles([hoSoRac(removed, p.rowId, p.fkey, tenDong(row), viTri)])
+      .then(function () { toast("Đã chuyển “" + (removed.name || "file") + "” vào thùng rác"); })
+      .catch(function () {
+        toast("Đã gỡ khỏi bảng nhưng máy chủ chưa ghi nhận — file không vào được thùng rác");
+      });
   }
+
+  fileDelModal.addEventListener("click", function (e) {
+    if (e.target === fileDelModal || e.target.closest(".modal-close") || e.target.closest(".modal-cancel")) {
+      closeFileDel(); return;
+    }
+    if (e.target.closest(".modal-done")) doRemoveFile();
+  });
 
   // ================= Tình trạng hồ sơ (CRUD + màu) =================
   var STATUS_PALETTE = [
@@ -2247,13 +2412,11 @@
         }
         tr.appendChild(td);
       }
-      tr.appendChild(makeFilesTd(row, "files"));           // File đang trình
-      tr.appendChild(makeTimeTd(row, "files"));            //   ↳ Thời gian
+      tr.appendChild(makeFilesTd(row, "files"));           // File đang trình — PDF
+      tr.appendChild(makeFilesTd(row, "filesCad"));        // File đang trình — DWG+Excel
       tr.appendChild(makeNoteTd(row));                     // Ghi chú
       tr.appendChild(makeFilesTd(row, "filesDuyet"));      // File đã duyệt
-      tr.appendChild(makeTimeTd(row, "filesDuyet"));       //   ↳ Thời gian
       tr.appendChild(makeFilesTd(row, "filesChapThuan"));  // Hồ sơ chấp thuận
-      tr.appendChild(makeTimeTd(row, "filesChapThuan"));   //   ↳ Thời gian
       tbody.appendChild(tr);
     }
 
@@ -2803,7 +2966,7 @@
     state.rows.forEach(function (r) {
       if (!kill[r.id]) return;
       names.push(htmlToText(r.hangMuc).trim() || "(dòng trống)");
-      ["files", "filesDuyet", "filesChapThuan"].forEach(function (fk) { files += (r[fk] || []).length; });
+      FKEYS.forEach(function (fk) { files += (r[fk] || []).length; });
     });
     return { kill: kill, total: names.length, direct: direct, names: names, files: files };
   }
@@ -2825,7 +2988,10 @@
       ul.appendChild(more);
     }
     delModal.querySelector(".del-files").textContent = info.files
-      ? "Kèm " + info.files + " file đính kèm sẽ biến mất khỏi bảng." : "";
+      ? (laMayChu()
+        ? "Kèm " + info.files + " file đính kèm — sẽ chuyển vào thùng rác, khôi phục được trong 30 ngày."
+        : "Kèm " + info.files + " file đính kèm sẽ biến mất khỏi bảng.")
+      : "";
     delModal.classList.add("show");
     delModal.querySelector(".modal-cancel").focus();   // mặc định đứng ở nút Huỷ, tránh Enter lỡ tay
   }
@@ -2834,11 +3000,32 @@
   function doDeleteRows() {
     if (!pendingKill) return;
     var kill = pendingKill.kill, n = 0;
+    // Gom file TRƯỚC khi bỏ dòng khỏi state.rows: sau đó không còn đường nào tra
+    // lại tên dòng để hiện trong thùng rác. Trước bản này, xoá dòng để lại file
+    // trên S3 vĩnh viễn mà chỉ script chạy tay mới dọn được.
+    var rac = [];
+    if (laMayChu()) {
+      state.rows.forEach(function (r) {
+        if (!kill[r.id]) return;
+        FKEYS.forEach(function (fk) {
+          (r[fk] || []).forEach(function (f, i) {
+            if (f && f.id) rac.push(hoSoRac(f, r.id, fk, tenDong(r), i));
+          });
+        });
+      });
+    }
     state.rows = state.rows.filter(function (r) { if (kill[r.id]) { n++; return false; } return true; });
     Object.keys(kill).forEach(function (id) { delete state.selected[id]; });
     closeDelConfirm();
     normalizeLevels(); save(); render();
     toast("Đã xóa " + n + " dòng");
+    if (rac.length) {
+      trashFiles(rac)
+        .then(function () { toast("Đã chuyển " + rac.length + " file vào thùng rác"); })
+        .catch(function () {
+          toast(rac.length + " file không vào được thùng rác — chúng vẫn nằm trên kho lưu trữ");
+        });
+    }
   }
 
   delModal.addEventListener("click", function (e) {
@@ -2850,6 +3037,518 @@
     if (info) openDelConfirm(info);
   });
 
+  // ================= Thùng rác (chỉ quản trị) =================
+  // Xoá file khỏi bảng chỉ đổi metadata sang status "trashed"; object trên S3 nằm
+  // nguyên chỗ cũ. Xoá vĩnh viễn mới đụng tới kho lưu trữ. Xem đầu api/files.js.
+  var trashModal = document.createElement("div");
+  trashModal.className = "modal-overlay";
+  trashModal.innerHTML =
+    '<div class="modal modal--lg">' +
+      '<div class="modal-head"><h3>Thùng rác</h3><button class="modal-close" type="button" aria-label="Đóng">×</button></div>' +
+      '<div class="modal-body"><p class="trash-info"></p><div class="trash-list"></div></div>' +
+      '<div class="modal-foot"><span class="modal-hint trash-prog"></span>' +
+        '<span class="trash-foot-acts">' +
+          '<button class="modal-cancel trash-all-dl" type="button">Tải toàn bộ về máy</button>' +
+          '<button class="modal-done modal-done--danger trash-all-del" type="button">Xoá vĩnh viễn tất cả</button>' +
+        '</span>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(trashModal);
+  var trashItems = [];
+  var trashBusy = false;
+
+  // save() chỉ hẹn giờ 250ms rồi trả về ngay nên không await được, mà bước bỏ cờ
+  // trashed ở máy chủ CHỈ được chạy sau khi bảng đã ghi xong. Ghi hỏng (409, mất
+  // mạng) mà vẫn bỏ cờ thì file rơi vào khoảng không: không nằm trong bảng, cũng
+  // không còn trong thùng rác. Mốc nhận biết là serverMtime — máy chủ trả mtime mới
+  // sau mỗi lần ghi thành công.
+  function doiLuuXong(mtimeCu, hanMs) {
+    var het = Date.now() + (hanMs || 20000);
+    return new Promise(function (xong, hong) {
+      (function nhin() {
+        if (serverMtime && serverMtime !== mtimeCu) { xong(); return; }
+        if (syncPaused) { hong(new Error("có người khác vừa sửa kế hoạch này")); return; }
+        if (Date.now() > het) { hong(new Error("máy chủ không phản hồi")); return; }
+        setTimeout(nhin, 120);
+      })();
+    });
+  }
+
+  function setTrashProg(t) {
+    var el = trashModal.querySelector(".trash-prog");
+    if (el) el.textContent = t || "";
+    var nut = trashModal.querySelectorAll(".trash-act, .trash-all-dl, .trash-all-del");
+    for (var i = 0; i < nut.length; i++) nut[i].disabled = !!t;
+  }
+  function fmtNgay(ms) {
+    if (!ms) return "?";
+    var d = new Date(ms);
+    return ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2) + "/" + d.getFullYear();
+  }
+
+  function openTrash() {
+    if (!canAdmin()) { toast("Chỉ quản trị mới mở được thùng rác"); return; }
+    if (!laMayChu()) { toast("Thùng rác chỉ có ở chế độ máy chủ"); return; }
+    if (!state.planId) { toast("Hãy mở một kế hoạch trước"); return; }
+    trashModal.classList.add("show");
+    loadTrash();
+  }
+  function closeTrash() {
+    if (trashBusy) { toast("Đang xử lý — đợi xong đã"); return; }
+    trashModal.classList.remove("show");
+  }
+
+  function loadTrash() {
+    var list = trashModal.querySelector(".trash-list");
+    list.innerHTML = "";
+    var cho = document.createElement("div");
+    cho.className = "trash-empty";
+    cho.textContent = "Đang tải…";
+    list.appendChild(cho);
+    setTrashProg("");
+    return fetch("api/files?trash=1&plan=" + encodeURIComponent(state.planId), { headers: authHeaders() })
+      .then(apiJson)
+      .then(function (j) {
+        if (!j || !j.ok) throw new Error((j && j.error) || "không đọc được thùng rác");
+        trashItems = j.items || [];
+        renderTrash(j);
+      })
+      .catch(function (e) {
+        trashItems = [];
+        list.innerHTML = "";
+        var d = document.createElement("div");
+        d.className = "trash-empty";
+        d.textContent = "Không mở được thùng rác: " + ((e && e.message) || "lỗi không rõ");
+        list.appendChild(d);
+        trashModal.querySelector(".trash-all-dl").disabled = true;
+        trashModal.querySelector(".trash-all-del").disabled = true;
+      });
+  }
+
+  function renderTrash(j) {
+    var list = trashModal.querySelector(".trash-list");
+    list.innerHTML = "";
+    trashModal.querySelector(".trash-info").textContent =
+      "File ở đây giữ " + ((j && j.ttlDays) || 30) + " ngày rồi tự xoá hẳn."
+      + (j && j.cleaned ? "  (vừa dọn " + j.cleaned + " file quá hạn)" : "");
+    trashModal.querySelector(".trash-all-dl").disabled = !trashItems.length;
+    trashModal.querySelector(".trash-all-del").disabled = !trashItems.length;
+    if (!trashItems.length) {
+      var e = document.createElement("div");
+      e.className = "trash-empty";
+      e.textContent = "Thùng rác trống.";
+      list.appendChild(e);
+      return;
+    }
+    trashItems.forEach(function (it) { list.appendChild(trashRow(it)); });
+  }
+
+  function trashRow(it) {
+    var wrap = document.createElement("div");
+    wrap.className = "trash-item";
+
+    var main = document.createElement("div");
+    main.className = "trash-main";
+    var nm = document.createElement("div");
+    nm.className = "trash-name";
+    nm.textContent = it.name;            // textContent, KHÔNG innerHTML: tên file do người dùng đặt
+    main.appendChild(nm);
+
+    var meta = document.createElement("div");
+    meta.className = "trash-meta";
+    var conLai = Math.ceil((it.expiresAt - Date.now()) / 86400000);
+    var moTa = fmtSize(it.size);
+    if (it.uploadedAt) moTa += " · tải lên " + fmtNgay(Date.parse(it.uploadedAt));
+    moTa += " · xoá " + fmtNgay(it.trashedAt)
+      + " · từ dòng: " + (it.rowName || "(không rõ)") + " · ";
+    meta.appendChild(document.createTextNode(moTa));
+    // Giờ phút giây và ghi chú để trong tooltip cho khỏi chật dòng
+    wrap.title = (it.uploadedAt ? "Tải lên: " + fmtUploadTime(it.uploadedAt) + "\n" : "")
+      + "Xoá: " + fmtUploadTime(new Date(it.trashedAt).toISOString())
+      + (it.note ? "\nGhi chú: " + htmlToText(it.note).trim() : "");
+    var han = document.createElement("span");
+    if (conLai <= 3) han.className = "trash-soon";
+    han.textContent = conLai > 1 ? ("còn " + conLai + " ngày")
+      : (conLai === 1 ? "còn 1 ngày" : "hết hạn hôm nay");
+    meta.appendChild(han);
+    main.appendChild(meta);
+    wrap.appendChild(main);
+
+    var acts = document.createElement("div");
+    acts.className = "trash-acts";
+    acts.appendChild(nutTrash("Khôi phục", "", function () { restoreOne(it); }));
+    acts.appendChild(nutTrash("Tải về", "", function () {
+      taiMotFile(it).catch(function (e) {
+        toast("Không tải được: " + ((e && e.message) || "lỗi không rõ"));
+      });
+    }));
+    acts.appendChild(nutTrash("Xoá hẳn", " trash-act--danger", function () { openPermDel([it]); }));
+    wrap.appendChild(acts);
+    return wrap;
+  }
+  function nutTrash(chu, them, fn) {
+    var b = document.createElement("button");
+    b.className = "trash-act" + (them || "");
+    b.type = "button";
+    b.textContent = chu;
+    b.addEventListener("click", fn);
+    return b;
+  }
+
+  // ---- khôi phục ----
+  function restoreOne(it) {
+    if (trashBusy) return;
+    var row = findRow(it.rowId);
+    if (!row) { openPickRow(it); return; }      // dòng gốc đã bị xoá → hỏi chỗ gắn
+    doRestore(it, row, it.fkey);
+  }
+
+  // Trả file về ĐÚNG CHỖ nó từng đứng, không nối vào cuối.
+  //
+  // Mảng file của một ô vốn xếp theo thứ tự tải lên — mỗi lần tải xong đều đẩy vào
+  // cuối — nên chèn theo `uploadedAt` là đặt lại đúng vị trí cũ, kể cả khi trong
+  // lúc file nằm thùng rác có người thêm hoặc xoá file khác trong cùng ô.
+  //
+  // File tải lên trước 09/2026 không có `uploadedAt`; lúc đó không có gì để so
+  // nên lùi về `viTri` — chỗ đứng đã ghi lại lúc xoá.
+  function chenLaiFile(arr, f, viTri) {
+    var t = Date.parse(f.uploadedAt || "");
+    if (!isNaN(t)) {
+      var coMoc = false;
+      for (var i = 0; i < arr.length; i++) {
+        var ti = Date.parse((arr[i] && arr[i].uploadedAt) || "");
+        if (isNaN(ti)) continue;
+        coMoc = true;
+        if (ti > t) { arr.splice(i, 0, f); return i; }
+      }
+      if (coMoc) { arr.push(f); return arr.length - 1; }   // mọi file còn lại đều cũ hơn
+    }
+    var v = Math.max(0, Math.min(Number(viTri) || 0, arr.length));
+    arr.splice(v, 0, f);
+    return v;
+  }
+
+  function doRestore(it, row, fkey) {
+    if (!Array.isArray(row[fkey])) row[fkey] = [];
+    // uploadedAt lấy từ bản đã lưu lúc xoá. KHÔNG được lấy trashedAt: đó là thời
+    // điểm vứt đi, không phải thời điểm tải lên — cột "Thời gian trình" sẽ sai.
+    chenLaiFile(row[fkey], {
+      id: it.id, name: it.name, size: it.size, type: it.type,
+      url: "api/files?id=" + it.id,
+      uploadedAt: it.uploadedAt || "",
+      note: it.note || "",
+    }, it.viTri);
+    trashBusy = true;
+    setTrashProg("Đang khôi phục…");
+    var mtimeCu = serverMtime;
+    save(); render();
+    doiLuuXong(mtimeCu)
+      .then(function () {
+        return retryUp(function () {
+          return fetch("api/files?action=restore&id=" + encodeURIComponent(it.id),
+            { method: "POST", headers: authHeaders() }).then(apiJson).then(function (j) {
+              if (!j || !j.ok) throw new Error((j && j.error) || "máy chủ từ chối");
+              return j;
+            });
+        }, 3);
+      })
+      .then(function () { toast("Đã khôi phục “" + it.name + "” về dòng: " + tenDong(row)); })
+      .catch(function (e) {
+        // Bảng đã ghi nhưng cờ trashed chưa gỡ: lần mở thùng rác sau máy chủ sẽ tự
+        // loại file này khỏi danh sách vì bảng đang tham chiếu nó.
+        toast("Khôi phục chưa trọn vẹn: " + ((e && e.message) || "lỗi không rõ"));
+      })
+      .then(function () {
+        trashBusy = false;
+        setTrashProg("");
+        loadTrash();
+      });
+  }
+
+  // ---- hộp chọn dòng đích (khi dòng gốc đã bị xoá) ----
+  var pickModal = document.createElement("div");
+  pickModal.className = "modal-overlay";
+  pickModal.innerHTML =
+    '<div class="modal modal--sm">' +
+      '<div class="modal-head"><h3>Chọn chỗ khôi phục</h3><button class="modal-close" type="button" aria-label="Đóng">×</button></div>' +
+      '<div class="modal-body"><p class="pick-lead"></p>' +
+        '<label class="pick-field">Dòng<select class="pick-row"></select></label>' +
+        '<label class="pick-field">Cột file<select class="pick-col">' +
+          '<option value="files">File đang trình — PDF</option>' +
+          '<option value="filesCad">File đang trình — DWG + Excel</option>' +
+          '<option value="filesDuyet">File đã duyệt</option>' +
+          '<option value="filesChapThuan">Hồ sơ chấp thuận</option>' +
+        '</select></label></div>' +
+      '<div class="modal-foot"><span class="modal-hint">Dòng cũ của file này không còn trong bảng.</span>' +
+        '<span class="del-actions"><button class="modal-cancel" type="button">Huỷ</button>' +
+        '<button class="modal-done pick-ok" type="button">Khôi phục</button></span>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(pickModal);
+  var pendingPick = null;
+
+  function openPickRow(it) {
+    if (!state.rows.length) { toast("Bảng chưa có dòng nào để gắn file vào"); return; }
+    pendingPick = it;
+    pickModal.querySelector(".pick-lead").textContent =
+      "“" + it.name + "” từng nằm ở dòng “" + (it.rowName || "không rõ") + "”, dòng đó đã bị xoá.";
+    var sel = pickModal.querySelector(".pick-row");
+    sel.innerHTML = "";
+    state.rows.forEach(function (r) {
+      var o = document.createElement("option");
+      o.value = r.id;
+      // thụt lề theo cấp để nhìn ra cây, tên dòng đặt bằng textContent
+      o.textContent = new Array((r.level || 0) + 1).join("    ") + tenDong(r);
+      sel.appendChild(o);
+    });
+    pickModal.querySelector(".pick-col").value =
+      FKEYS.indexOf(it.fkey) >= 0 ? it.fkey : "files";
+    pickModal.classList.add("show");
+    sel.focus();
+  }
+  function closePick() { pickModal.classList.remove("show"); pendingPick = null; }
+
+  pickModal.addEventListener("click", function (e) {
+    if (e.target === pickModal || e.target.closest(".modal-close") || e.target.closest(".modal-cancel")) {
+      closePick(); return;
+    }
+    if (!e.target.closest(".pick-ok")) return;
+    var it = pendingPick;
+    if (!it) return;
+    var rowId = pickModal.querySelector(".pick-row").value;
+    var fkey = pickModal.querySelector(".pick-col").value;
+    var row = findRow(rowId);
+    closePick();
+    if (!row) { toast("Dòng vừa chọn không còn — thử lại"); loadTrash(); return; }
+    doRestore(it, row, fkey);
+  });
+
+  // ---- tải file về máy ----
+  // Đường tải KHÔNG đi qua fetch tới máy chủ rồi dựng blob: file tới 500MB sẽ nằm
+  // hết trong RAM tab. Với file trên S3 thì xin URL đã ký (cùng origin, có gửi
+  // header quyền) rồi để trình duyệt tự tải — điều hướng không vướng CORS. File cũ
+  // nằm trong MongoDB không có URL ký, phải đi đường blob; chúng luôn dưới 16MB.
+  function coChonThuMuc() { return typeof window.showDirectoryPicker === "function"; }
+
+  function xinUrlKy(it) {
+    return fetch("api/files?id=" + encodeURIComponent(it.id) + "&signed=1", { headers: authHeaders() })
+      .then(apiJson).then(function (j) {
+        if (!j || !j.ok || !j.url) throw new Error((j && j.error) || "không xin được đường tải");
+        return j.url;
+      });
+  }
+  function moLienKet(href, tenTai) {
+    var a = document.createElement("a");
+    a.href = href;
+    if (tenTai) a.download = tenTai;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+  function taiMotFile(it) {
+    if (it.onS3) return xinUrlKy(it).then(function (u) { moLienKet(u); });
+    return fetch("api/files?id=" + encodeURIComponent(it.id), { headers: authHeaders() })
+      .then(function (r) {
+        if (!r.ok) throw new Error("máy chủ trả HTTP " + r.status);
+        return r.blob();
+      })
+      .then(function (b) {
+        var u = URL.createObjectURL(b);
+        moLienKet(u, it.name);
+        setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+      });
+  }
+
+  // Tên file trên đĩa: bỏ ký tự Windows cấm, thêm số thứ tự để hai file trùng tên
+  // không ghi đè nhau (getFileHandle với create:true sẽ ghi đè lặng lẽ).
+  function tenFileAnToan(ten, stt) {
+    var t = String(ten || "file").replace(/[\\/:*?"<>|]/g, "_").replace(/^\.+/, "_").trim();
+    return ("0" + stt).slice(-2) + " - " + (t.slice(0, 140) || "file");
+  }
+
+  function taiToanBo() {
+    if (!trashItems.length || trashBusy) return;
+    var ds = trashItems.slice();
+    if (!coChonThuMuc()) {
+      if (!confirm("Trình duyệt này không cho chọn thư mục.\n\n"
+        + ds.length + " file sẽ tải lần lượt vào thư mục Tải xuống. Tiếp tục?")) return;
+      return taiLanLuot(ds);
+    }
+    window.showDirectoryPicker({ mode: "readwrite" }).then(function (dir) {
+      return taiVaoThuMuc(ds, dir);
+    }).catch(function (e) {
+      if (e && e.name === "AbortError") return;     // người dùng bấm Huỷ ở hộp chọn thư mục
+      trashBusy = false; setTrashProg("");
+      toast("Không tải được: " + ((e && e.message) || "lỗi không rõ"));
+    });
+  }
+
+  function taiVaoThuMuc(ds, dir) {
+    trashBusy = true;
+    var i = 0, dat = 0, hong = 0;
+    function tiep() {
+      if (i >= ds.length) {
+        trashBusy = false; setTrashProg("");
+        toast(hong ? ("Tải xong " + dat + " file, " + hong + " file lỗi")
+                   : ("Đã tải " + dat + " file vào thư mục đã chọn"));
+        return Promise.resolve();
+      }
+      var it = ds[i++], stt = i;
+      setTrashProg("Đang tải " + i + "/" + ds.length + ": " + it.name);
+      return ghiVaoThuMuc(it, dir, stt).then(function () { dat++; }, function (e) {
+        hong++;
+        console.error("tai file that bai", it.name, e);
+      }).then(tiep);
+    }
+    return tiep();
+  }
+
+  function ghiVaoThuMuc(it, dir, stt) {
+    // Với file trên S3: xin URL ký rồi fetch THẲNG tới S3 KHÔNG kèm header. Gửi
+    // header quyền qua chuyển hướng cross-origin sẽ kích hoạt preflight và vướng
+    // CORS của bucket.
+    var lay = it.onS3
+      ? xinUrlKy(it).then(function (u) { return fetch(u); })
+      : fetch("api/files?id=" + encodeURIComponent(it.id), { headers: authHeaders() });
+    return lay.then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return dir.getFileHandle(tenFileAnToan(it.name, stt), { create: true })
+        .then(function (fh) { return fh.createWritable(); })
+        .then(function (w) {
+          // pipeTo: dữ liệu chảy thẳng từ mạng vào ổ đĩa, không qua RAM.
+          if (r.body && r.body.pipeTo) return r.body.pipeTo(w);
+          return r.blob().then(function (b) {
+            return w.write(b).then(function () { return w.close(); });
+          });
+        });
+    });
+  }
+
+  // Fallback cho trình duyệt không có File System Access API. Giãn cách 400ms:
+  // bắn một loạt <a>.click() liền nhau sẽ bị chặn như popup.
+  function taiLanLuot(ds) {
+    trashBusy = true;
+    var i = 0;
+    function tiep() {
+      if (i >= ds.length) {
+        trashBusy = false; setTrashProg("");
+        toast("Đã yêu cầu tải " + ds.length + " file");
+        return Promise.resolve();
+      }
+      var it = ds[i++];
+      setTrashProg("Đang tải " + i + "/" + ds.length + ": " + it.name);
+      return taiMotFile(it).catch(function (e) {
+        console.error("tai file that bai", it.name, e);
+      }).then(function () {
+        return new Promise(function (ok) { setTimeout(ok, 400); });
+      }).then(tiep);
+    }
+    return tiep();
+  }
+
+  // ---- xoá vĩnh viễn ----
+  var permModal = document.createElement("div");
+  permModal.className = "modal-overlay";
+  permModal.innerHTML =
+    '<div class="modal modal--sm">' +
+      '<div class="modal-head"><h3>Xoá vĩnh viễn</h3><button class="modal-close" type="button" aria-label="Đóng">×</button></div>' +
+      '<div class="modal-body"><p class="del-lead perm-lead"></p><ul class="del-list perm-list"></ul>' +
+        '<p class="del-files">Xoá cả trên kho lưu trữ. Không có đường lấy lại.</p></div>' +
+      '<div class="modal-foot"><span class="modal-hint">Nên tải về giữ một bản trước.</span>' +
+        '<span class="del-actions">' +
+          '<button class="modal-cancel" type="button">Huỷ</button>' +
+          '<button class="modal-cancel perm-backup" type="button">Tải về trước</button>' +
+          '<button class="modal-done modal-done--danger perm-ok" type="button">Xoá vĩnh viễn</button>' +
+        '</span>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(permModal);
+  var pendingPerm = null;
+
+  function openPermDel(ds) {
+    if (!ds.length || trashBusy) return;
+    pendingPerm = ds;
+    var tong = ds.reduce(function (s, x) { return s + (x.size || 0); }, 0);
+    permModal.querySelector(".perm-lead").textContent =
+      "Xoá hẳn " + ds.length + " file (" + fmtSize(tong) + "):";
+    var ul = permModal.querySelector(".perm-list");
+    ul.innerHTML = "";
+    ds.slice(0, 8).forEach(function (x) {
+      var li = document.createElement("li");
+      li.textContent = x.name;
+      ul.appendChild(li);
+    });
+    if (ds.length > 8) {
+      var more = document.createElement("li");
+      more.className = "del-more";
+      more.textContent = "… và " + (ds.length - 8) + " file nữa";
+      ul.appendChild(more);
+    }
+    permModal.classList.add("show");
+    permModal.querySelector(".modal-cancel").focus();
+  }
+  function closePerm() { permModal.classList.remove("show"); pendingPerm = null; }
+
+  permModal.addEventListener("click", function (e) {
+    if (e.target === permModal || e.target.closest(".modal-close")) { closePerm(); return; }
+    if (e.target.closest(".perm-backup")) {
+      var ds = pendingPerm || [];
+      closePerm();
+      if (ds.length === 1) {
+        taiMotFile(ds[0]).catch(function (er) {
+          toast("Không tải được: " + ((er && er.message) || "lỗi không rõ"));
+        });
+      } else if (coChonThuMuc()) {
+        window.showDirectoryPicker({ mode: "readwrite" })
+          .then(function (dir) { return taiVaoThuMuc(ds, dir); })
+          .catch(function (er) {
+            if (er && er.name === "AbortError") return;
+            trashBusy = false; setTrashProg("");
+            toast("Không tải được: " + ((er && er.message) || "lỗi không rõ"));
+          });
+      } else {
+        taiLanLuot(ds);
+      }
+      return;
+    }
+    if (e.target.closest(".modal-cancel")) { closePerm(); return; }
+    if (e.target.closest(".perm-ok")) {
+      var list = pendingPerm || [];
+      closePerm();
+      doPermDel(list);
+    }
+  });
+
+  function doPermDel(ds) {
+    if (!ds.length) return;
+    trashBusy = true;
+    var i = 0, dat = 0, hong = 0;
+    function tiep() {
+      if (i >= ds.length) {
+        trashBusy = false; setTrashProg("");
+        toast(hong ? ("Đã xoá " + dat + " file, " + hong + " file lỗi")
+                   : ("Đã xoá vĩnh viễn " + dat + " file"));
+        return loadTrash();
+      }
+      var it = ds[i++];
+      setTrashProg("Đang xoá " + i + "/" + ds.length + "…");
+      return fetch("api/files?id=" + encodeURIComponent(it.id),
+        { method: "DELETE", headers: authHeaders() })
+        .then(apiJson)
+        .then(function (j) { if (j && j.ok) dat++; else hong++; }, function () { hong++; })
+        .then(tiep);
+    }
+    return tiep();
+  }
+
+  trashModal.addEventListener("click", function (e) {
+    if (e.target === trashModal || e.target.closest(".modal-close")) { closeTrash(); return; }
+    if (e.target.closest(".trash-all-dl")) { taiToanBo(); return; }
+    if (e.target.closest(".trash-all-del")) { openPermDel(trashItems.slice()); }
+  });
+  var btnTrash = document.getElementById("btnTrash");
+  if (btnTrash) btnTrash.addEventListener("click", openTrash);
 
   var btnView = document.getElementById("btnView");
   var btnHide = document.getElementById("btnHide");
@@ -2866,15 +3565,15 @@
     { key: "nguoiLam",       label: "Người làm",            w: 220 },
     { key: "tienDo",         label: "Tiến độ kế hoạch",     w: 130 },
     { key: "tinhTrang",      label: "Tình trạng hồ sơ",     w: 160 },
-    { key: "files",          label: "File đang trình",      w: 140 },
-    { key: "timeFiles",      label: "Thời gian trình",      w: 112 },
+    { key: "files",          label: "File đang trình (PDF)",        w: 140 },
+    { key: "filesCad",       label: "File đang trình (DWG + Excel)", w: 140 },
     { key: "ghiChu",         label: "Ghi chú",              w: 200 },
     { key: "filesDuyet",     label: "File đã duyệt",        w: 140 },
-    { key: "timeDuyet",      label: "Thời gian duyệt",      w: 112 },
-    { key: "filesChapThuan", label: "Hồ sơ chấp thuận",     w: 140 },
-    { key: "timeChapThuan",  label: "Thời gian chấp thuận", w: 112 }
+    { key: "filesChapThuan", label: "Hồ sơ chấp thuận",     w: 140 }
   ];
-  var TIME_CK = { files: "timeFiles", filesDuyet: "timeDuyet", filesChapThuan: "timeChapThuan" };
+  // THỨ TỰ ở đây phải khớp TỪNG Ô với thứ tự <th> trong thead và thứ tự
+  // appendChild trong render(): initColGrips ghép th thứ i với COLUMNS[i] theo
+  // vị trí, không theo tên. Lệch một ô là mọi cột lệch nhãn và lệch bề rộng.
   var MIN_COL_W = 56, MIN_ROW_H = 28;
   var DENSITY = [
     { key: "compact", label: "Gọn",    pad: "3px 10px",  min: 26, fpad: 3 },
@@ -3088,7 +3787,9 @@
       var r = state.rows[i];
       lines.push([codes[i], htmlToText(r.hangMuc), htmlToText(r.chiTiet),
         (r.nguoiLam || []).join("; "), htmlToText(r.tienDo), htmlToText(r.tinhTrang),
-        fileNamesCsv(r.files), fileTimesCsv(r.files), notesCsv(r),
+        fileNamesCsv(r.files), fileTimesCsv(r.files),
+        fileNamesCsv(r.filesCad), fileTimesCsv(r.filesCad),
+        notesCsv(r),
         fileNamesCsv(r.filesDuyet), fileTimesCsv(r.filesDuyet),
         fileNamesCsv(r.filesChapThuan), fileTimesCsv(r.filesChapThuan)].map(esc).join(","));
     }
@@ -3230,10 +3931,23 @@
     });
     if (typeof r.hidden !== "boolean") r.hidden = false;
     if (!Array.isArray(r.nguoiLam)) r.nguoiLam = r.nguoiLam ? splitPeople(htmlToText(r.nguoiLam)) : [];
-    ["files", "filesDuyet", "filesChapThuan"].forEach(function (fk) {
+    FKEYS.forEach(function (fk) {
       if (!Array.isArray(r[fk])) r[fk] = [];
       else r[fk] = r[fk].filter(function (f) { return f && typeof f === "object" && (f.url || f.dataUrl); });
     });
+
+    // Chuyển đổi một lần cho dữ liệu có trước 09/2026: hồi đó "File đang trình"
+    // là MỘT cột nên mọi thứ nằm chung trong `files`. Tách theo đuôi file — PDF ở
+    // lại, còn lại sang `filesCad` (bao gồm cả .jpg, .doc, .rvt… để không file nào
+    // bị giấu mất). Chỉ chạy khi `filesCad` còn trống: sau lần đầu, người dùng tự
+    // chọn cột lúc tải lên và không được đụng vào lựa chọn đó nữa.
+    if (!r.filesCad.length && r.files.length) {
+      var giu = [], chuyen = [];
+      r.files.forEach(function (f) {
+        (/\.pdf$/i.test(String(f.name || "")) ? giu : chuyen).push(f);
+      });
+      if (chuyen.length) { r.files = giu; r.filesCad = chuyen; }
+    }
   }
 
   function finishInit() {
@@ -3301,6 +4015,7 @@
   }
   function showPlanScreen() {
     state.planId = null; state.planName = "";
+    capNhatNutThungRac();
     planScreen.hidden = false; appMain.hidden = true;
     document.title = "Kế hoạch — Bảng theo dõi hạng mục";
     try { if (location.hash) history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
@@ -3320,6 +4035,7 @@
     planTitle.textContent = state.planName || "Bảng theo dõi hạng mục";
     document.title = (state.planName ? state.planName + " — " : "") + "Bảng theo dõi hạng mục";
     try { history.replaceState(null, "", "#plan=" + encodeURIComponent(state.planId)); } catch (e) {}
+    capNhatNutThungRac();
     finishInit();
   }
   function resetTableState() {

@@ -1,9 +1,9 @@
 # Dự án: Bảng theo dõi hạng mục (BIM)
 
 Ứng dụng HTML tĩnh + serverless functions, chạy trên Vercel. Dữ liệu bảng ở
-MongoDB Atlas; **file đính kèm ở Amazon S3** (từ 09/2026, tối đa 200MB/file).
+MongoDB Atlas; **file đính kèm ở Amazon S3** (từ 09/2026, tối đa 500MB/file).
 
-- **Production:** https://bim-ruddy.vercel.app
+- **Production:** https://bvtc.vcijsc.com
 - **Vercel project:** `bim` thuộc tài khoản `nguyenvhuyutc-9517`
 
 Site cũ `bim-wheat.vercel.app` thuộc tài khoản khác (`ngothuytq98`) — không có
@@ -25,6 +25,40 @@ quyền deploy, nhưng dùng chung MongoDB nên dữ liệu hai bên giống nha
 metadata (`{key, status, size}`). File tải lên **trước 09/2026** vẫn nằm trong
 MongoDB dạng `data`/`chunks` và vẫn đọc được — hai đường chạy song song, không
 migrate. Chi tiết + ba cái bẫy dễ sập: [docs/luu-file-s3.md](docs/luu-file-s3.md).
+
+**Thùng rác:** xoá file (lẻ hoặc theo dòng) chỉ đổi `status` sang `"trashed"` —
+object trên S3 không đụng tới, giữ 30 ngày rồi máy chủ tự dọn. Chỉ quản trị mở
+được, và file trong đó không tải tự do được nữa. Khôi phục phải **ghi bảng trước,
+gọi `?action=restore` sau** — đảo thứ tự là sinh file mồ côi kiểu mới. Xem
+§ Thùng rác trong [docs/luu-file-s3.md](docs/luu-file-s3.md).
+
+**Mọi action POST mới của `api/files.js` phải được thêm vào `ACTION_POST`** — cái
+shim tương thích ở đó chặn mọi POST lạ bằng 426 "hãy tải lại trang", một lỗi
+trông y hệt lỗi cache.
+
+## Cột file
+
+Một dòng có **bốn** mảng file, hằng `FKEYS` giữ danh sách:
+
+| Mảng | Cột trên bảng |
+|---|---|
+| `files` | File đang trình — **PDF** |
+| `filesCad` | File đang trình — **DWG + Excel** (và mọi đuôi khác) |
+| `filesDuyet` | File đã duyệt |
+| `filesChapThuan` | Hồ sơ chấp thuận |
+
+`FKEYS` **được chép ở ba nơi** — `bang-hang-muc.html`, `api/files.js`,
+`scripts/don-file-mo-coi.mjs` — và cả ba phải khớp. Thiếu một cột ở `api/files.js`
+thì thùng rác coi file trong cột đó là rác; thiếu ở script dọn thì báo cáo gọi file
+thật là mồ côi. `node scratch/thu-cau-truc-cot.mjs` kiểm đúng chuyện này.
+
+`COLUMNS`, thứ tự `<th>` trong `thead`, và thứ tự `appendChild` trong `render()`
+phải **khớp từng ô theo vị trí** — `initColGrips` ghép `th` thứ i với `COLUMNS[i]`
+theo chỉ số chứ không theo tên. Cũng đừng thêm hàng `<th>` thứ hai vào `thead` vì
+lý do đó.
+
+Ba cột "Thời gian" đã bỏ (09/2026) — mốc tải lên xem ở tooltip của file. **CSV vẫn
+giữ** các cột đó: file CSV không có tooltip.
 
 ## Môi trường
 
@@ -59,9 +93,10 @@ cách xác minh và bảng xử lý sự cố.
 API dùng 2 mật khẩu đặt qua biến môi trường trên Vercel:
 
 - `EDIT_KEY` — quyền sửa: ghi dữ liệu bảng, tạo/đổi tên kế hoạch, tải file lên.
-- `ADMIN_KEY` — quyền quản trị: như trên, thêm xoá kế hoạch và xoá file.
-- Xem/tải file xuống (GET) luôn tự do. **Không đặt cả hai biến → không khoá gì**
-  (tương thích cũ).
+- `ADMIN_KEY` — quyền quản trị: như trên, thêm xoá kế hoạch, xoá file và **toàn bộ
+  thùng rác** (liệt kê, khôi phục, xoá vĩnh viễn).
+- Xem/tải file xuống (GET) tự do — **trừ file đang nằm trong thùng rác**, thứ chỉ
+  quản trị tải được. **Không đặt cả hai biến → không khoá gì** (tương thích cũ).
 
 Client gửi mật khẩu qua header `x-edit-key` (lưu localStorage, nhập ở nút đăng
 nhập trên giao diện). Endpoint `GET /api/data?whoami=1` trả `{role, protected}`

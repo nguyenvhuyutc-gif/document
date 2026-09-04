@@ -3,9 +3,10 @@
 Ứng dụng theo dõi hạng mục công trình: một trang HTML tĩnh cộng vài serverless
 function, chạy trên Vercel.
 
-- **Địa chỉ dùng thật:** <https://bim-ruddy.vercel.app>
+- **Địa chỉ dùng thật:** <https://bvtc.vcijsc.com>
 - **Dữ liệu bảng:** MongoDB Atlas
-- **File đính kèm:** Amazon S3 (tối đa **200MB/file**)
+- **File đính kèm:** Amazon S3 (tối đa **500MB/file**)
+- **Thùng rác:** file đã xoá giữ 30 ngày, khôi phục hoặc tải về được — chỉ quản trị
 
 ---
 

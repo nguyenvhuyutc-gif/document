@@ -11,11 +11,15 @@
 //    A. Object trên S3 mà không doc nào trong bim_files trỏ tới  → xoá được
 //    B. Doc trong bim_files mà không dòng nào trong bim_app trỏ tới → CHỈ BÁO CÁO
 //
-//  Vì sao chiều B tồn tại: có BỐN đường sinh file mồ côi chứ không phải một —
-//  confirm xong nhưng save() hỏng; xoá dòng bằng doDeleteRows() vốn không bao giờ
-//  gọi DELETE api/files; removeFile bắn-rồi-quên; và xoá từ site cũ bim-wheat.
-//  Ba đường sau sinh ra doc CÓ metadata mà KHÔNG dòng nào trỏ tới — script chỉ
-//  quét chiều A sẽ mù hoàn toàn với chúng.
+//  Vì sao chiều B tồn tại: có nhiều đường sinh file mồ côi chứ không phải một —
+//  confirm xong nhưng save() hỏng; xoá từ site cũ bim-wheat (chạy code cũ trên
+//  cùng MongoDB); tab đang mở bản HTML cũ trong cache. Chúng sinh ra doc CÓ
+//  metadata mà KHÔNG dòng nào trỏ tới — script chỉ quét chiều A sẽ mù với chúng.
+//
+//  Từ khi có thùng rác, hai đường lớn nhất đã bịt: doDeleteRows() và removeFile()
+//  nay đẩy file sang status "trashed" thay vì bỏ mặc. Doc "trashed" KHÔNG phải rác
+//  và script này bỏ qua chúng ở cả hai chiều — chiều A vì doc vẫn giữ `key`, chiều
+//  B nhờ nhánh lọc riêng. Máy chủ tự xoá chúng sau 30 ngày.
 //
 //  Thư mục scripts/ nằm trong .vercelignore nên không bao giờ lên bundle production.
 // ============================================================
@@ -196,16 +200,26 @@ try {
   for await (const plan of db.collection(colApp).find({}, { projection: { data: 1 } })) {
     const rows = (plan.data && Array.isArray(plan.data.rows)) ? plan.data.rows : [];
     for (const row of rows) {
-      for (const fk of ["files", "filesDuyet", "filesChapThuan"]) {
+      // Bốn cột file — khớp FKEYS ở api/files.js và bang-hang-muc.html. Thiếu một
+      // cột ở đây thì mọi file trong cột đó bị báo là rác, và ai tin báo cáo mà
+      // xoá tay là mất dữ liệu thật.
+      for (const fk of ["files", "filesCad", "filesDuyet", "filesChapThuan"]) {
         for (const f of (Array.isArray(row[fk]) ? row[fk] : [])) if (f && f.id) idDuocTro.add(String(f.id));
       }
     }
   }
+  // Doc `trashed` KHÔNG phải rác: chúng nằm trong thùng rác, người dùng khôi phục
+  // được và máy chủ tự xoá sau 30 ngày. Theo định nghĩa thì không dòng nào trỏ tới
+  // chúng — trộn vào đây thì mỗi lần xoá file là báo cáo lại dài thêm một dòng, và
+  // chẳng mấy chốc không ai đọc nữa. Đếm riêng để vẫn thấy được khối lượng.
   const docThua = [];
+  let soTrash = 0, byteTrash = 0;
   for await (const d of db.collection(colFiles).find(
-    { kind: { $ne: "chunk" } }, { projection: { name: 1, size: 1, status: 1, createdAt: 1 } }
+    { kind: { $ne: "chunk" } }, { projection: { name: 1, size: 1, status: 1, createdAt: 1, trashedAt: 1 } }
   )) {
-    if (!idDuocTro.has(String(d._id))) docThua.push(d);
+    if (idDuocTro.has(String(d._id))) continue;
+    if (d.status === "trashed") { soTrash++; byteTrash += d.size || 0; continue; }
+    docThua.push(d);
   }
   if (!docThua.length) console.log("  (không có)");
   else {
@@ -216,6 +230,10 @@ try {
     if (docThua.length > 50) console.log("  … và " + (docThua.length - 50) + " doc nữa");
     console.log("  Tổng: " + docThua.length + " doc. KHÔNG tự xoá — cần đọc kỹ rồi xử lý tay.");
     console.log("  (doc 'pending' mới tạo vài phút trước là phiên tải lên đang chạy, đừng đụng)");
+  }
+  if (soTrash) {
+    console.log("\n  Ngoài ra: " + soTrash + " doc đang nằm trong thùng rác (" + mb(byteTrash)
+      + ") — bỏ qua, máy chủ tự xoá sau 30 ngày.");
   }
 
   // ---- 6. xoá ----

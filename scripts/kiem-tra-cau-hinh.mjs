@@ -185,6 +185,63 @@ try {
   else loi("KHÔNG xoá được object thử", "xoá tay: " + KEY);
 }
 
+// ---- 4. CORS ----
+// Script này chạy bằng Node nên KHÔNG bị CORS chặn — mọi phép thử ở trên vẫn đạt
+// kể cả khi trình duyệt hoàn toàn không gọi được S3. Đó là lý do phần này tồn tại:
+// thiếu origin trong CORS làm hỏng tải file lên ở đúng nơi khó phát hiện nhất
+// (trình duyệt người dùng), mà lỗi lại trông y hệt lỗi chữ ký.
+//
+// Không dùng GetBucketCORS: khoá API thường không có quyền đó. Thay vào đó gửi
+// đúng cái preflight mà trình duyệt gửi — 200 là được phép, 403 là không.
+console.log("\n══ 4. CORS (trình duyệt gọi thẳng S3) ══");
+// Đổi domain thì PHẢI sửa danh sách này — S3 khớp origin chính xác từng ký tự,
+// và mọi phép thử khác trong script đều không phát hiện được thiếu sót đó.
+const ORIGIN_CAN = [
+  ["https://bvtc.vcijsc.com", "production"],
+  ["http://localhost:3000", "vercel dev ở máy"],
+];
+for (const [org, ghiChu] of ORIGIN_CAN) {
+  const kq = [];
+  for (const method of ["PUT", "GET"]) {
+    let ma = null;
+    // Thử hai lần. Một cú fetch hỏng vì mạng chập chờn mà bị báo thành "thiếu
+    // CORS" sẽ đẩy người đọc đi sửa nhầm chỗ — mà sửa CORS thì phải vào AWS
+    // Console, không phải việc làm nhầm cho vui.
+    for (let lan = 0; lan < 2 && ma === null; lan++) {
+      try {
+        const r = await fetch(`${base}/bim/_kiemtra/probe`, {
+          method: "OPTIONS",
+          headers: {
+            Origin: org,
+            "Access-Control-Request-Method": method,
+            "Access-Control-Request-Headers": "content-disposition,content-type",
+          },
+          signal: AbortSignal.timeout(15000),
+        });
+        ma = r.status;
+      } catch (e) {
+        if (lan === 1) ma = "mạng";
+      }
+    }
+    kq.push([method, ma]);
+  }
+  const nhan = org + "  (" + ghiChu + ")";
+  const chuoi = kq.map(([m, s]) => m + ":" + s).join("  ");
+  if (kq.every(([, s]) => s === 200)) {
+    ok(nhan + " — PUT và GET đều được phép");
+  } else if (kq.some(([, s]) => s === "mạng")) {
+    canhBao(nhan + " — " + chuoi,
+      "không gọi tới S3 được ở phép thử này. Trục trặc mạng, CHƯA kết luận được\n"
+      + "      về CORS — chạy lại script trước khi đi sửa gì.");
+  } else {
+    canhBao(nhan + " — " + chuoi,
+      org.startsWith("https")
+        ? "thiếu origin này trong CORS của bucket → TẢI FILE LÊN TRÊN WEB THẬT SẼ HỎNG.\n"
+        + "      AWS Console → S3 → " + BUCKET + " → Permissions → CORS, thêm origin vào AllowedOrigins."
+        : "chỉ ảnh hưởng khi chạy thử bằng vercel dev ở máy");
+  }
+}
+
 console.log("\n  ════ " + dat + " đạt, " + hong + " hỏng"
   + (canh ? ", " + canh + " cảnh báo" : "") + " ════");
 if (!hong) {

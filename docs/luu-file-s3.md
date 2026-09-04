@@ -2,7 +2,7 @@
 
 Từ 09/2026 file đính kèm không còn nằm trong MongoDB. Client tải thẳng lên
 Amazon S3 qua **presigned URL**; serverless function chỉ ký URL và ghi metadata.
-Giới hạn 1 file: **200MB**.
+Giới hạn 1 file: **500MB**.
 
 > Bản đầu thiết kế cho Cloudflare R2 rồi đổi sang S3 vì công ty đã dùng AWS sẵn.
 > Đổi được rẻ vì `aws4fetch` vốn là bộ ký SigV4 **của S3** — R2 chỉ là endpoint
@@ -15,9 +15,9 @@ Giới hạn 1 file: **200MB**.
 
 ```text
 TẢI LÊN
-  Client ──① POST /api/files?action=sign-upload   (cần EDIT_KEY, size ≤ 200MB)
+  Client ──① POST /api/files?action=sign-upload   (cần EDIT_KEY, size ≤ 500MB)
          │                                         → ghi doc {status:"pending", key}
-         ◀─② { uploadUrl, id, key }                presigned PUT, hạn 15 phút
+         ◀─② { uploadUrl, id, key }                presigned PUT, hạn 1 giờ
          ──③ XHR PUT + header Content-Disposition & Content-Type ──▶ S3
          ──④ POST /api/files?action=confirm        → HEAD lấy size thật
                                                    → updateOne pending → ready
@@ -28,7 +28,78 @@ TẢI XUỐNG
          ◀─② 302 + Cache-Control: private, no-store
          ──③ trình duyệt tải thẳng ───────────────────────────────▶ S3
               tên file & MIME lấy từ metadata ĐÃ LƯU TRÊN OBJECT
+
+XOÁ (qua thùng rác)
+  Client ──① POST /api/files?action=trash   (cần ADMIN_KEY, cả mẻ 1 request)
+         │      → $set {status:"trashed", trashedAt, origin:{planId,rowId,fkey,rowName}}
+         │      → object trên S3 KHÔNG đụng tới
+         ──② GET /api/files?trash=1&plan=…  → liệt kê + dọn bản quá hạn 30 ngày
+         ──③a POST ?action=restore&id=…     → bỏ cờ, file quay lại bảng
+         ──③b DELETE ?id=…                  → xoá hẳn: object S3 + doc
 ```
+
+## Thùng rác
+
+Xoá file khỏi bảng **không** xoá gì trên S3 — chỉ đổi `status` sang `"trashed"`,
+đóng dấu `trashedAt` và ghi `origin` để còn biết đường khôi phục. Object nằm
+nguyên chỗ cũ: copy một object 500MB sang prefix khác trong hàm 15 giây là rủi ro
+không đổi lấy gì.
+
+`origin` phải mang theo **cả những thứ chỉ tồn tại trong document kế hoạch**, vì
+mục đó vừa bị gỡ khỏi đúng nơi duy nhất giữ chúng:
+
+| Trường | Vì sao cần |
+|---|---|
+| `planId`, `rowId`, `fkey` | Chỗ file từng nằm |
+| `rowName` | Để thùng rác nói được "từ dòng: Móng M1" kể cả khi dòng đã mất |
+| `uploadedAt` | **Nội dung cột "Thời gian trình/duyệt/chấp thuận"**. `bim_files` không lưu nó |
+| `note` | Ghi chú riêng của file — cũng chỉ sống trong document kế hoạch |
+| `viTri` | Chỗ đứng trong mảng, dùng khi file không có `uploadedAt` |
+
+**Khôi phục chèn lại đúng vị trí, không nối vào cuối.** Mảng file của một ô vốn
+xếp theo thứ tự tải lên (mỗi lần tải xong đều đẩy vào cuối), nên `chenLaiFile()`
+chèn theo `uploadedAt` — file về đúng chỗ cũ kể cả khi trong lúc nó nằm thùng rác
+có người thêm hoặc xoá file khác trong cùng ô. File tải lên trước 09/2026 không
+có `uploadedAt` nên lùi về `viTri`.
+
+Đừng dùng `trashedAt` làm `uploadedAt` khi khôi phục: đó là lúc **vứt đi**, không
+phải lúc **tải lên**, và cột thời gian sẽ hiện sai ngày.
+
+| Vào thùng rác từ | Khôi phục |
+|---|---|
+| Xoá 1 file ở ô đính kèm | Về đúng dòng và cột cũ |
+| Xoá dòng (`doDeleteRows`) | Dòng gốc đã mất → giao diện hỏi dòng + cột đích |
+
+Ba điều đáng biết:
+
+- **Toàn bộ endpoint thùng rác đòi `ADMIN_KEY`**, kể cả `GET ?trash=1`. `canAdmin()`
+  ở giao diện chỉ ẩn nút; hàng rào thật nằm ở `api/files.js`.
+- **File đang trong thùng rác không tải tự do được nữa** — `GET ?id=` trả 404 cho
+  người không phải quản trị. Nó đã bị gỡ khỏi bảng; ai biết id vẫn tải được thì
+  việc xoá chẳng có nghĩa gì.
+- **Dọn quá hạn chạy lười**, ngay trong request liệt kê, tối đa 10 file mỗi lần để
+  không chạm trần `maxDuration` 15 giây. Không dùng S3 Lifecycle: nó xoá object mà
+  không biết gì về MongoDB, để lại doc trỏ vào hư không.
+
+Máy chủ còn tự loại khỏi danh sách thùng rác những file **đang được bảng tham
+chiếu**. Đó là lớp tự chữa lành: nếu `save()` xong mà bước `restore` hỏng giữa
+chừng, file tự biến khỏi thùng rác ở lần mở sau thay vì nằm lại gây hoang mang.
+
+Thứ tự khi khôi phục là **bắt buộc**: ghi bảng (`save()`, có bảo vệ xung đột 409)
+trước, gọi `?action=restore` sau. Làm ngược lại thì lúc ghi bảng hỏng, file đã bỏ
+cờ `trashed` mà không dòng nào trỏ tới — không nằm trong bảng, cũng không còn
+trong thùng rác.
+
+### `?signed=1` — vì sao cần
+
+`GET /api/files?id=…&signed=1` trả URL đã ký dạng JSON thay vì 302. Thẻ `<a>` và
+`window.open` không gửi được header, mà file trong thùng rác lại đòi `x-edit-key`.
+Giao diện xin URL kèm header (cùng origin) rồi mở thẳng URL đó. Cách này cũng
+tránh CORS của bucket: điều hướng của trình duyệt không bị CORS chặn, `fetch` thì có.
+
+Khi tải cả thùng rác vào một thư mục (File System Access API), giao diện **fetch
+thẳng tới URL đã ký, không kèm header** — gửi header quyền qua chuyển hướng
+cross-origin sẽ kích hoạt preflight và vướng CORS.
 
 ## Ba điều dễ làm sai — đọc trước khi sửa `api/files.js`
 
@@ -133,7 +204,7 @@ AWS Console → S3 → bucket → Permissions → Cross-origin resource sharing:
 ```json
 [
   {
-    "AllowedOrigins": ["https://bim-ruddy.vercel.app"],
+    "AllowedOrigins": ["https://bvtc.vcijsc.com"],
     "AllowedMethods": ["PUT", "GET", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag"],
@@ -146,10 +217,38 @@ AWS Console → S3 → bucket → Permissions → Cross-origin resource sharing:
 sách header an toàn của CORS, nên trình duyệt sẽ gửi preflight `OPTIONS` trước
 mỗi lần PUT.
 
+### Cách kiểm CORS thật sự đang cho phép gì
+
+`kiem-tra-cau-hinh.mjs` có mục 4 làm việc này. Nó **không** đọc cấu hình bằng
+`GetBucketCORS` — khoá API thường không có quyền đó — mà gửi đúng cái preflight
+trình duyệt gửi. **200 là được phép, 403 là không.** Kiểm tay:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS \
+  -H "Origin: https://bvtc.vcijsc.com" \
+  -H "Access-Control-Request-Method: PUT" \
+  "https://s3.ap-southeast-1.amazonaws.com/com.vcijsc.bvtc/bim/probe"
+```
+
+Phép kiểm này quan trọng hơn vẻ ngoài của nó: **mọi thứ khác trong script đều
+chạy bằng Node nên không bị CORS chặn**. Bucket có thể qua sạch 11 phép thử ở mục
+3 trong khi trình duyệt hoàn toàn không gọi nổi S3. Thiếu origin biểu hiện thành
+`xhr.onerror` ở client, mà giao diện dịch thành "mất kết nối khi tải lên" — không
+một chữ nào nhắc tới CORS.
+
 Muốn chạy thử ở máy bằng `vercel dev` thì thêm `http://localhost:3000` vào
-`AllowedOrigins` — **chỉ ở bucket thử nghiệm, đừng thêm vào production**. Rủi ro
-thấp: vẫn phải có presigned URL hợp lệ, mà URL đó chỉ `/api/files` cấp và nó
-đòi `EDIT_KEY`.
+`AllowedOrigins`. Rủi ro thấp: vẫn phải có presigned URL hợp lệ, mà URL đó chỉ
+`/api/files` cấp và nó đòi `EDIT_KEY`.
+
+> **Đổi domain là phải sửa CORS.** Ngày 04/09/2026 trang đổi từ
+> `bim-ruddy.vercel.app` sang `bvtc.vcijsc.com`; bucket đã được cập nhật theo, và
+> `bim-ruddy.vercel.app` **không còn** trong `AllowedOrigins` — ai vào bằng link
+> cũ vẫn xem và tải file xuống bình thường nhưng **không tải lên được**, với thông
+> báo "mất kết nối khi tải lên". Danh sách origin cần kiểm nằm ở biến
+> `ORIGIN_CAN` trong `kiem-tra-cau-hinh.mjs` — sửa domain thì sửa cả chỗ đó.
+>
+> Khoá `bim-dev` không có quyền `GetBucketCORS`/`PutBucketCORS`, nên chỉ đọc được
+> CORS bằng preflight và chỉ sửa được ở AWS Console.
 
 > **`npm run deploy:preview` sinh hostname MỚI mỗi lần**, và S3 khớp origin chính
 > xác từng ký tự. **Mỗi lần** deploy preview đều phải thêm hostname mới vào CORS
@@ -168,7 +267,7 @@ thấp: vẫn phải có presigned URL hợp lệ, mà URL đó chỉ `/api/file
    thêm một hai ngày rồi mới Delete, để còn đường lùi.
 
 URL đã ký bằng khoá cũ hết hiệu lực ngay khi khoá bị vô hiệu hoá. Hạn dài nhất
-là 15 phút (presigned PUT), nên chọn lúc vắng người dùng.
+là 1 giờ (presigned PUT), nên chọn lúc vắng người dùng.
 
 Bật **AWS Budgets** kèm cảnh báo. URL presigned PUT không ràng buộc kích thước
 body — tham số `size` ở `sign-upload` chỉ có tính khai báo. Ai giữ `EDIT_KEY`
@@ -279,7 +378,7 @@ khi trích dẫn con số này ra ngoài**:
 | Request PUT | ~$0,005/1000 |
 | Request GET | ~$0,0004/1000 |
 
-Với 10–30 người và file ~200MB, 100GB egress miễn phí tương đương khoảng **500
+Với 10–30 người và file ~500MB, 100GB egress miễn phí tương đương khoảng **200
 lượt tải/tháng** — đội này khó chạm tới, nên thực tế chỉ trả tiền lưu trữ.
 
 *(So sánh: Cloudflare R2 rẻ hơn ở lưu trữ (~$0,015/GB) và egress luôn 0đ. Ở quy

@@ -105,14 +105,14 @@ không tự đổi. Cách redeploy nhanh trên web Vercel:
 
 ### Bước 4 — Kiểm tra
 
-1. Mở https://bim-ruddy.vercel.app trong **cửa sổ ẩn danh** (Ctrl+Shift+N) —
+1. Mở https://bvtc.vcijsc.com trong **cửa sổ ẩn danh** (Ctrl+Shift+N) —
    phải thấy chế độ chỉ xem, có nút "🔒 Chỉ xem — đăng nhập để sửa".
 2. Đăng nhập bằng `EDIT_KEY` → sửa được, tải file lên được, **không** thấy nút
    xoá file/kế hoạch.
 3. Thoát, đăng nhập bằng `ADMIN_KEY` → thấy đủ nút xoá.
 
 Kiểm tra nhanh bằng URL: mở
-`https://bim-ruddy.vercel.app/api/data?whoami=1` — thấy `"protected":true`
+`https://bvtc.vcijsc.com/api/data?whoami=1` — thấy `"protected":true`
 nghĩa là khoá đang bật.
 
 ---

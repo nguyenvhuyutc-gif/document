@@ -12,7 +12,7 @@ chỉ nói "deploy" — mặc định là **production**.
 
 | Mục | Giá trị |
 |---|---|
-| URL production | https://bim-ruddy.vercel.app |
+| URL production | https://bvtc.vcijsc.com |
 | Tài khoản Vercel | `nguyenvhuyutc-9517` (nguyenvhuyutc@gmail.com), gói Hobby |
 | Scope / team | `team_ZxR5LGq3wCByGjtulrdlZZkE` |
 | Project ID | `prj_2wdCGn7lLL6ROSYdMGFW1yHrhowk` |
@@ -77,7 +77,7 @@ Deploy mất khoảng 30–90 giây. Đặt timeout tối thiểu 300000ms.
 ## Bước 4 — Xác minh (bắt buộc, đừng bỏ)
 
 ```powershell
-foreach ($u in @("https://bim-ruddy.vercel.app/","https://bim-ruddy.vercel.app/api/data")) {
+foreach ($u in @("https://bvtc.vcijsc.com/","https://bvtc.vcijsc.com/api/data")) {
   try { $r = Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 45 -ErrorAction Stop
         "$u -> OK $($r.StatusCode), $($r.Content.Length) bytes" }
   catch { "$u -> LOI $($_.Exception.Response.StatusCode.value__)" }
@@ -113,10 +113,32 @@ $body = ConvertTo-Json @(@{ key="TEN_BIEN"; value="gia_tri"; type="encrypted"
 Invoke-RestMethod -Method Post -Uri "https://api.vercel.com/v10/projects/$proj/env?teamId=$team" -Headers $h -Body $body
 ```
 
+**`--force` KHÔNG cứu được.** `"gia_tri" | vercel env add KEY production --force`
+in ra `Removed trailing newline from stdin input` rồi `✓ Overrode` — trông y như
+thành công, nhưng giá trị lưu vẫn **rỗng**. Đã dính lại lần nữa ngày 04/09/2026.
+Đừng tin dòng `✓` của CLI; chỉ tin phép thử ở dưới.
+
+Biến **đã tồn tại** thì POST ở trên sẽ lỗi trùng key. Lấy id rồi PATCH:
+
+```powershell
+$all = Invoke-RestMethod -Uri "https://api.vercel.com/v9/projects/$proj/env?teamId=$team" -Headers $h -Method Get
+foreach ($e in $all.envs | Where-Object { $_.key -eq "MONGODB_URI" }) {
+  Invoke-RestMethod -Method Patch -Headers $h -Body (@{ value = $uri } | ConvertTo-Json) `
+    -Uri "https://api.vercel.com/v9/projects/$proj/env/$($e.id)?teamId=$team" | Out-Null
+}
+```
+
 Sau khi đổi biến môi trường **phải deploy lại** thì function mới nạp giá trị mới.
 
-Kiểm tra giá trị đã lưu: `vercel env pull <file> --environment production --yes`
-rồi đọc file — nếu thấy `KEY=""` là biến rỗng, cần set lại.
+**Cách kiểm chắc chắn nhất là gọi API thật**, không phải đọc file:
+
+```powershell
+curl.exe -s --max-time 45 "https://bvtc.vcijsc.com/api/data?list=1"
+```
+
+`MongoParseError: Invalid scheme` = biến rỗng. `vercel env pull` **không dùng
+được** để kiểm nữa: biến tạo qua `env add` bị đánh dấu *Sensitive* và pull không
+tải giá trị về, nên file trông như thiếu biến kể cả khi nó có giá trị đúng.
 
 ## Quy tắc an toàn
 
@@ -143,4 +165,4 @@ rồi đọc file — nếu thấy `KEY=""` là biến rỗng, cần set lại.
 | `Could not retrieve Project Settings` | Token không có quyền với project đang link | Kiểm tra `orgId` trong `.vercel/project.json` |
 | Trang trắng ở `/` | Sai rewrite trong `vercel.json` | Kiểm tra rewrite `/` → `/bang-hang-muc.html` |
 
-Xem log runtime: `npm run vercel:logs https://bim-ruddy.vercel.app`
+Xem log runtime: `npm run vercel:logs https://bvtc.vcijsc.com`

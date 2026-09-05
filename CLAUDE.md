@@ -18,6 +18,8 @@ quyền deploy, nhưng dùng chung MongoDB nên dữ liệu hai bên giống nha
 | `api/files.js` | Ký presigned URL cho S3 + ghi metadata file vào MongoDB |
 | `scripts/kiem-tra-cau-hinh.mjs` | Kiểm `.env` + MongoDB + S3 ở máy — an toàn, chạy lúc nào cũng được |
 | `scripts/don-file-mo-coi.mjs` | Dọn file mồ côi trên S3 — chạy tay, xoá được dữ liệu thật |
+| `scripts/dong-bo-thu-muc.mjs` + `dong-bo/` | Đồng bộ thư mục NAS ↔ bảng — xem § Đồng bộ NAS |
+| `scripts/thu-quyen-tvgs.mjs` | Kiểm phân quyền cột TVGS trên API thật — chạy lại sau mỗi lần đụng `api/data.js` hoặc `api/files.js` |
 | `scripts/thu-quyen-tvgs.mjs` | Kiểm phân quyền THẬT của cột mở tự do — **chạy lại sau mỗi lần đụng `api/data.js` hoặc `api/files.js`** |
 | `vercel.json` | Rewrite trang gốc + CORS + `functions.maxDuration` |
 | `serve.cjs`, `start-server.bat`, `data.json` | **Tư liệu, KHÔNG chạy được nữa** — xem § Bản LAN |
@@ -104,6 +106,44 @@ quản trị lưu ở `localStorage`, **riêng từng máy** — đổi cột kh
 người vừa mất quyền.
 
 `node scratch/thu-cau-truc-cot.mjs` canh toàn bộ những điều trên.
+
+## Đồng bộ NAS
+
+Thư mục bản vẽ trên NAS ↔ bảng. Chạy trên **máy trạm**, trỏ vào đường dẫn UNC —
+NAS chỉ là kho, không chạy được app.
+
+```
+dong-bo.bat                    bấm đúp → CHẠY KHÔ (có `pause`, đọc kết quả)
+dong-bo.bat --thuc-hien        ghi thật
+dong-bo-theo-lich.bat          bản cho Task Scheduler — KHÔNG `pause`, có ghi log
+```
+
+**Đừng cắm `dong-bo.bat` vào Task Scheduler.** `pause` khiến tác vụ treo chờ một
+phím không ai bấm; Windows thấy "đang chạy" nên bỏ qua mọi lần sau. Hỏng im lặng,
+ba tuần sau mới lộ. Dùng `dong-bo-theo-lich.bat`. Và **chỉ MỘT máy được cắm lịch**
+— khoá `.bim-sync.lock` là lưới an toàn, không phải giấy phép.
+
+Bốn module trong `scripts/dong-bo/`, mỗi cái do một phiên viết theo
+[HOP-DONG.md](scripts/dong-bo/HOP-DONG.md). **Đọc § Bẫy đã biết ở đầu file đó trước
+khi sửa bất cứ gì** — bảy bẫy, mỗi cái đều đã cắn thật một lần.
+
+Ba điều quan trọng nhất:
+
+- **KHÔNG BAO GIỜ XOÁ**, ở cả hai bên. Sổ ghi `.bim-sync.json` phân biệt "chưa từng
+  đồng bộ" với "đã bị xoá"; không có nó thì file xoá trên web sẽ sống lại từ thư mục
+  ở mỗi lần chạy.
+- **Chỉ đụng thư mục có `.bim-id`.** Cây thư mục cũ của công ty không bị chạm tới.
+- **Chỉ cần `EDIT_KEY`**, không có `ADMIN_KEY` — script không xoá gì.
+
+Cấu hình ở `scripts/.env.dong-bo` (bị `.gitignore` chặn; mẫu là `.env.dong-bo.example`).
+Đường dẫn phải là **UNC**, không phải ổ map: ổ map thuộc phiên đăng nhập nên Task
+Scheduler chạy tài khoản khác sẽ không thấy.
+
+Đo được trên NAS công ty: `\\?\UNC\` **chạy**, trần đường dẫn **1039 ký tự** (Samba,
+cao hơn Windows nhiều). Nên trần 260 chỉ còn là ràng buộc của Explorer/CAD, không
+phải của việc ghi. Cây hiện tại dài nhất 217 → an toàn cả hai phía.
+`node scripts/thu-nas.mjs <đường dẫn>` đo lại được bất cứ lúc nào, chỉ tạo một thư
+mục tạm rồi xoá.
 
 ## Môi trường
 

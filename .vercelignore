@@ -5,8 +5,13 @@
 
 # Chỉ dùng khi chạy local (máy chủ LAN) — Vercel dùng MongoDB thay thế
 serve.cjs
-start-server.bat
 data.json
+
+# MỌI file .bat, không liệt kê từng cái. Trước đây chỉ chặn đúng start-server.bat,
+# nên dong-bo.bat (09/2026) lọt qua và suýt mở công khai qua https://…/dong-bo.bat.
+# File .bat là công cụ chạy ở máy, không bao giờ là thứ để phục vụ trên web — và
+# chúng hay chứa đường dẫn nội bộ, tên máy chủ, tên ổ mạng.
+*.bat
 
 # Tài liệu — KHÔNG deploy. Vercel phục vụ mọi file tĩnh, nên file .md nằm trong
 # thư mục gốc sẽ mở được công khai qua https://…/CLAUDE.md và tương tự. Chúng

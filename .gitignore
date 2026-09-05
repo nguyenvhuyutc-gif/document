@@ -15,3 +15,10 @@ scratch/
 
 .env*
 !.env.example
+# Mau cau hinh cua script dong bo NAS. Khong co dong nay thi .env* o tren nuot
+# mat file mau (no khong khop ngoai le .env.example), va nguoi dung khong bao
+# gio thay duoc mau tren repo. File that .env.dong-bo van bi chan.
+!.env.dong-bo.example
+
+# Nhat ky cua script dong bo NAS chay theo lich - du lieu du an, khong commit
+nhat-ky/

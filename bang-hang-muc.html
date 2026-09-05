@@ -382,6 +382,35 @@
     transition: border-color .12s, color .12s, background .12s;
   }
   .file-add:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-weak); }
+  /* ---------- Cột DWG+Excel: mỗi file PDF một ô, thẳng hàng theo dòng ---------- */
+  /* Ô trống phải cao đúng 24px như .file-item, không thì hai cột file lệch nhau. */
+  .file-slot { display: flex; align-items: center; height: 24px; }
+  .file-add--slot { padding: 2px 7px; opacity: .5; }
+  .file-add--slot:hover { opacity: 1; }
+  /* file DWG chưa gán vào dòng PDF nào — xếp dưới cùng, viền đứt cho dễ nhận ra */
+  .file-item--roi .file-link { border-style: dashed; opacity: .85; }
+  /* file tải lên trong 24 giờ qua — đổi sang xanh lá để phân biệt với file cũ.
+     Dùng --success (đã có sẵn cho dấu chấm toast), không đẻ thêm biến màu. */
+  .file-item--new .file-link {
+    background: color-mix(in srgb, var(--success) 12%, transparent);
+    border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+    color: var(--success);
+  }
+  .file-item--new .file-link:hover {
+    background: var(--surface);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 20%, transparent);
+  }
+  /* chấm tròn nhỏ đầu chip: phân biệt được cả khi người dùng khó nhận màu */
+  .file-item--new .file-link::before {
+    content: ""; flex: none; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--success); margin-right: 1px;
+  }
+  .file-pair-up {
+    flex: none; width: 20px; height: 20px; border: none; background: none; cursor: pointer;
+    color: var(--text-dim); line-height: 1; border-radius: 5px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .file-pair-up:hover { color: var(--accent); background: var(--accent-weak); }
   /* Thanh tiến độ tải lên: nền ô đổ màu theo biến --up (0→1) do JS đặt.
      Không thêm DOM mới — ô file được render lại liên tục trong lúc đồng bộ. */
   .files-cell.uploading {
@@ -757,12 +786,24 @@
   body.is-viewonly #btnAdd, body.is-viewonly #btnDel, body.is-viewonly #btnImport, body.is-viewonly #btnHide,
   body.is-viewonly #btnIndent, body.is-viewonly #btnOutdent, body.is-viewonly #btnAddEmpty,
   body.is-viewonly #btnNewPlan, body.is-viewonly .plan-card__actions,
-  body.is-viewonly .file-add, body.is-viewonly .file-del,
+  body.is-viewonly .file-add, body.is-viewonly .file-del, body.is-viewonly .file-pair-up,
   body.is-viewonly .row-add, body.is-viewonly .col-check input,
   body.is-viewonly #btnView, body.is-viewonly .col-grip, body.is-viewonly .row-grip,
   body.is-viewonly .view-pop,
   body.is-viewonly .chip .x { display: none !important; }
   body.no-admin .plan-delete, body.no-admin .file-del { display: none !important; }
+  /* Cột "Ý kiến TVGS" mở cho mọi người, kể cả chưa đăng nhập: nút của RIÊNG cột này
+     không bị ẩn theo quyền. Phải đặt SAU hai khối trên và cũng dùng !important thì
+     mới thắng được chúng. */
+  body.is-viewonly td[data-ck="filesTvgs"] .file-add,
+  body.is-viewonly td[data-ck="filesTvgs"] .file-del,
+  body.is-viewonly td[data-ck="filesTvgs"] .file-pair-up,
+  body.no-admin td[data-ck="filesTvgs"] .file-del { display: inline-flex !important; }
+  /* Menu "Hiển thị" chỉ quản trị dùng: ẩn/hiện cột, độ cao dòng, bề rộng cột,
+     hiện lại dòng đã ẩn. Người khác luôn thấy bố cục mặc định (cờ `off` trong
+     COLUMNS). Ẩn cả tay kéo bề rộng cột và độ cao dòng cho khớp. */
+  body.no-admin #btnView, body.no-admin .view-pop,
+  body.no-admin .col-grip, body.no-admin .row-grip { display: none !important; }
   .auth-btn[hidden] { display: none !important; }
 
   @media (max-width: 560px) {
@@ -888,6 +929,9 @@
             <th class="col-files">
               <div class="th-label">File đang trình<span class="th-sub">DWG + Excel</span></div>
             </th>
+            <th class="col-files">
+              <div class="th-label">Ý kiến TVGS</div>
+            </th>
             <th class="col-note">
               <div class="th-label">Ghi chú</div>
               <input class="colfilter" data-col="ghiChu" type="text" placeholder="Lọc cột…" aria-label="Lọc theo Ghi chú">
@@ -947,6 +991,7 @@
   var HEADERS = ["STT", "Hạng mục", "Thông tin chi tiết", "Người làm", "Tiến độ kế hoạch", "Tình trạng hồ sơ",
     "File đang trình (PDF)", "Thời gian trình (PDF)",
     "File đang trình (DWG+Excel)", "Thời gian trình (DWG+Excel)",
+    "Ý kiến TVGS", "Thời gian TVGS",
     "Ghi chú", "File đã duyệt", "Thời gian duyệt", "Hồ sơ chấp thuận", "Thời gian chấp thuận"];
 
   function uid() { return "r" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36); }
@@ -1060,6 +1105,14 @@
   function authGated() { return storageMode === "server" && authProtected; }
   function canEdit() { return !authGated() || role === "edit" || role === "admin"; }
   function canAdmin() { return !authGated() || role === "admin"; }
+
+  // Cột "Ý kiến TVGS" mở cho MỌI quyền — kể cả người chưa đăng nhập: bên tư vấn
+  // giám sát cần gửi và rút ý kiến mà không cầm mật khẩu của chủ đầu tư. Hàng rào
+  // thật nằm ở máy chủ (`?action=tvgs` của api/data.js và cờ `cot` trong
+  // api/files.js); hai hàm dưới đây chỉ để nút hiện/ẩn cho khớp.
+  var COT_TU_DO = "filesTvgs";
+  function canEditCot(fk) { return fk === COT_TU_DO || canEdit(); }
+  function canXoaFile(fk) { return fk === COT_TU_DO || canAdmin(); }
   function applyRole() {
     // đổi quyền → dựng lại bố cục: chỉ xem luôn thấy bảng mặc định (xem ghi chú ở applyView)
     document.body.classList.toggle("is-viewonly", !canEdit());
@@ -1269,6 +1322,43 @@
   }
   document.getElementById("btnConflictTake").addEventListener("click", conflictTakeServer);
   document.getElementById("btnConflictForce").addEventListener("click", conflictForceMine);
+  // Ghi RIÊNG cột "Ý kiến TVGS" của một dòng. Người không có mật khẩu không được
+  // POST cả document (đường đó ghi đè mọi thứ), nên đi lối này: chỉ gửi đúng mảng
+  // file của một dòng, máy chủ tự vá vào. Nhờ vậy dù bảng trong máy họ có cũ đi
+  // chăng nữa cũng không thể xoá mất thay đổi của người khác.
+  function patchTvgs(rowId) {
+    var row = findRow(rowId);
+    if (!row || !state.planId || storageMode !== "server") return;
+    var body = JSON.stringify({ files: Array.isArray(row[COT_TU_DO]) ? row[COT_TU_DO] : [] });
+    savePending = true;
+    return retryUp(function () {
+      return fetch(API + "?action=tvgs&plan=" + encodeURIComponent(state.planId)
+          + "&row=" + encodeURIComponent(rowId),
+          { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: body })
+        .then(apiJson)
+        .then(function (j) {
+          // 409 (có người vừa lưu xen vào) cũng ném ra đây để retryUp thử lại: bản vá
+          // này không phụ thuộc nội dung cũ nên thử lại là xong, không cần hỏi ai.
+          if (!j || !j.ok) throw new Error((j && j.error) || "máy chủ từ chối");
+          return j;
+        });
+    }, 3).then(function (j) {
+      serverMtime = j.mtime || serverMtime;
+      savePending = false;
+      setMode("server");
+    }).catch(function (e) {
+      savePending = false;
+      setMode("server-err");
+      toast("Không lưu được ý kiến TVGS: " + ((e && e.message) || "lỗi không rõ"));
+    });
+  }
+  // Lưu thay đổi vừa làm ở MỘT ô file. Có quyền sửa thì lưu cả bảng như thường;
+  // không có thì chỉ cột mở tự do mới ghi được, và ghi bằng đường vá riêng.
+  function luuFile(rowId, fkey) {
+    if (canEdit()) { save(); return; }
+    if (fkey === COT_TU_DO) patchTvgs(rowId);
+  }
+
   function save() {
     if (saveTimer) clearTimeout(saveTimer);
     if (!canEdit()) return;                    // chỉ xem → không đẩy gì lên máy chủ
@@ -1296,6 +1386,12 @@
       if (rowAddPop.classList.contains("show")) return;  // đang mở menu chèn dòng → không re-render đóng mất menu
       var ae = document.activeElement;
       if (ae && ae.classList && (ae.classList.contains("cell") || ae.classList.contains("combo-trigger") || ae.classList.contains("combo-search"))) return;
+      // Nhãn "mới tải lên" hết hạn theo đồng hồ chứ không theo dữ liệu, nên tab mở
+      // qua ngày sẽ giữ nhãn quá hạn nếu chỉ vẽ lại khi máy chủ đổi. Đếm lại ở đây
+      // — dùng ké vòng lặp này, không đẻ thêm timer.
+      var soMoi = demFileMoi();
+      if (soMoi !== soFileMoiTruoc) { soFileMoiTruoc = soMoi; render(); }
+
       var pid = state.planId;
       fetch(API + "?plan=" + encodeURIComponent(pid)).then(function (r) { return r.json(); }).then(function (j) {
         if (state.planId !== pid) return;             // đã chuyển kế hoạch trong lúc chờ
@@ -1528,6 +1624,23 @@
     return p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + d.getFullYear() +
       " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
   }
+  // file tải lên trong vòng 24 giờ gần nhất → đánh dấu "mới" trên mọi cột file
+  var UPLOAD_NEW_MS = 24 * 60 * 60 * 1000;
+  function isUploadNew(f) {
+    if (!f || !f.uploadedAt) return false;
+    var t = new Date(f.uploadedAt).getTime();
+    return !isNaN(t) && (Date.now() - t) < UPLOAD_NEW_MS && (Date.now() - t) >= 0;
+  }
+  var soFileMoiTruoc = -1;
+  function demFileMoi() {
+    var n = 0;
+    state.rows.forEach(function (r) {
+      FKEYS.forEach(function (k) {
+        (Array.isArray(r[k]) ? r[k] : []).forEach(function (f) { if (isUploadNew(f)) n++; });
+      });
+    });
+    return n;
+  }
   function fileTooltip(f) {
     var up = fmtUploadTime(f.uploadedAt);
     var t = up ? "Tải lên: " + up + "\n" : "";
@@ -1538,8 +1651,118 @@
   // BỐN cột file của một dòng. Mọi chỗ cần duyệt hết file của một dòng đều phải
   // dùng hằng này — trước đây danh sách ba cột được chép tay ở sáu chỗ, và thêm
   // cột thứ tư đã suýt bỏ sót vài chỗ trong số đó.
-  // `filesCad` thêm 09/2026 khi "File đang trình" tách làm hai cột con.
-  var FKEYS = ["files", "filesCad", "filesDuyet", "filesChapThuan"];
+  // `filesCad` thêm 09/2026 khi "File đang trình" tách làm hai cột con;
+  // `filesTvgs` ("Ý kiến TVGS") thêm sau đó, cũng ghép cặp theo dòng với cột PDF.
+  var FKEYS = ["files", "filesCad", "filesTvgs", "filesDuyet", "filesChapThuan"];
+
+  // Khoá nhận dạng một file trong dòng. `uid` do client đặt lúc tải lên; file cũ
+  // (có trước khi có uid) chỉ mang `id` của kho lưu trữ, nên phải nhận cả hai.
+  function fileKey(f) { return String((f && (f.uid || f.id)) || ""); }
+
+  // ---- Ghép cặp theo dòng: mỗi file PDF một ô ở MỖI cột dưới đây ----
+  // Cột PDF (`files`) là cột gốc; mỗi cột trong PAIRED bám theo nó từng dòng một.
+  // Thêm một cột ghép cặp nữa chỉ cần thêm tên vào đây (và vào FKEYS, COLUMNS,
+  // thead, render) — mọi chỗ khác đọc PAIRED chứ không ghi cứng tên cột.
+  var PAIRED = ["filesCad", "filesTvgs"];
+
+  // Mỗi file trong một cột ghép cặp mang `pairUid` = uid của file PDF nó đi kèm;
+  // chuỗi rỗng nghĩa là chưa gán vào dòng nào. Ghép bằng KHOÁ chứ không bằng vị trí,
+  // nên mảng vẫn dày — mọi chỗ đếm file, xoá file, thùng rác, CSV giữ nguyên cách duyệt.
+  // Trả về { slots, roi }: `slots` đúng một ô cho mỗi file PDF (ô có thể rỗng, khi
+  // có thì nằm ở `.kem`); `roi` là file chưa gán, kể cả file trỏ vào PDF đã bị xoá
+  // — để không file nào biến mất khỏi bảng.
+  function capFile(row, fkey) {
+    var pdfs = Array.isArray(row.files) ? row.files : [];
+    var conLai = (Array.isArray(row[fkey]) ? row[fkey] : []).slice();
+    var slots = pdfs.map(function (p) {
+      var k = fileKey(p), lay = null;
+      for (var i = 0; i < conLai.length; i++) {
+        // splice: file thứ hai cùng trỏ vào một PDF sẽ rơi xuống `roi` thay vì bị giấu
+        if (k && String(conLai[i].pairUid || "") === k) { lay = conLai.splice(i, 1)[0]; break; }
+      }
+      return { pdf: p, kem: lay };
+    });
+    return { slots: slots, roi: conLai };
+  }
+
+  // Gán một file DWG đang rời vào ô trống ĐẦU TIÊN của dòng. Hết ô trống thì nói
+  // thẳng, chứ không im lặng bỏ qua để người dùng tưởng đã gán xong.
+  function ganVaoODau(rowId, fkey, fid) {
+    if (!canEditCot(fkey)) return;
+    var row = findRow(rowId);
+    if (!row) return;
+    var f = null;
+    (Array.isArray(row[fkey]) ? row[fkey] : []).forEach(function (x) {
+      if (fileKey(x) === String(fid)) f = x;
+    });
+    if (!f) return;
+    var trong = null;
+    capFile(row, fkey).slots.forEach(function (sl) { if (!trong && !sl.kem) trong = sl.pdf; });
+    if (!trong) { toast("Không còn ô trống — mỗi file PDF chỉ nhận một file ở cột này"); return; }
+    f.pairUid = fileKey(trong);
+    // Vào ô rồi thì file này không còn dòng ghi chú riêng nữa (ghi chú đi theo dòng,
+    // lưu ở file PDF). Dồn ghi chú cũ sang, y như lúc di trú dữ liệu — bỏ qua là
+    // người dùng thấy ghi chú biến mất ngay khi bấm gán.
+    // Ghi chú nằm ở file PDF — cột đó KHÔNG mở tự do. Người không có quyền sửa thì
+    // để nguyên ghi chú tại chỗ, không thì bản vá cột TVGS mang theo một thay đổi
+    // mà máy chủ không cho ghi, và ghi chú biến mất khỏi màn hình mà không lưu được.
+    if (f.note && canEdit()) {
+      trong.note = trong.note ? (trong.note + "<br>" + f.note) : f.note;
+      f.note = "";
+    }
+    luuFile(rowId, fkey); render();
+    toast("Đã gán “" + (f.name || "file") + "” vào dòng của “" + (trong.name || "file PDF") + "”");
+  }
+
+  // Một chip file: liên kết tải xuống + nút xoá. `roi` = file DWG chưa gán vào dòng
+  // PDF nào — hiện viền đứt, kèm nút gán vào ô trống đầu tiên.
+  function fileItem(row, fkey, f, roi) {
+    var key = fileKey(f);
+    var isNew = isUploadNew(f);
+    var item = document.createElement("span");
+    item.className = "file-item" + (roi ? " file-item--roi" : "") + (isNew ? " file-item--new" : "");
+    var a = document.createElement("a");
+    a.className = "file-link";
+    a.href = f.url || f.dataUrl || "#";
+    a.setAttribute("download", f.name || "file");
+    a.setAttribute("title", (roi ? "CHƯA gán vào dòng nào\n" : "") + (isNew ? "Mới tải lên (trong 24 giờ qua)\n" : "") + fileTooltip(f));
+    if (f.chunks) { a.setAttribute("data-chunks", String(f.chunks)); a.setAttribute("data-fid", key); }  // file lớn → tải theo mảnh bằng JS
+    a.innerHTML = fileIconSvg + '<span class="fn"></span>';
+    a.querySelector(".fn").textContent = shortFileName(f.name);
+    item.appendChild(a);
+    if (roi) {
+      var up = document.createElement("button");
+      up.type = "button"; up.className = "file-pair-up";
+      up.setAttribute("data-id", row.id);
+      up.setAttribute("data-fid", key);
+      up.setAttribute("data-fkey", fkey);
+      up.setAttribute("title", "Gán file này vào ô trống đầu tiên");
+      up.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+      item.appendChild(up);
+    }
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "file-del";
+    del.setAttribute("data-fid", key);
+    del.setAttribute("data-id", row.id);
+    del.setAttribute("data-fkey", fkey);
+    del.setAttribute("title", "Xoá file");
+    del.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>';
+    item.appendChild(del);
+    return item;
+  }
+  // Ô trống của cột DWG+Excel: cao đúng một dòng file để hai cột thẳng hàng, kèm
+  // nút + tải file lên cho RIÊNG dòng đó (data-pair = uid của file PDF cùng dòng).
+  function oTrongCad(pairKey) {
+    var slot = document.createElement("span");
+    slot.className = "file-slot";
+    var add = document.createElement("button");
+    add.type = "button"; add.className = "file-add file-add--slot";
+    add.setAttribute("data-pair", pairKey);
+    add.setAttribute("title", "Tải file DWG/Excel cho dòng này");
+    add.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
+    slot.appendChild(add);
+    return slot;
+  }
 
   function makeFilesTd(row, fkey) {
     var td = document.createElement("td");
@@ -1552,34 +1775,30 @@
 
     var list = document.createElement("div");
     list.className = "files-list";
-    (Array.isArray(row[fkey]) ? row[fkey] : []).forEach(function (f) {
-      var key = f.uid || f.id || "";
-      var item = document.createElement("span");
-      item.className = "file-item";
-      var a = document.createElement("a");
-      a.className = "file-link";
-      a.href = f.url || f.dataUrl || "#";
-      a.setAttribute("download", f.name || "file");
-      a.setAttribute("title", fileTooltip(f));
-      if (f.chunks) { a.setAttribute("data-chunks", String(f.chunks)); a.setAttribute("data-fid", key); }  // file lớn → tải theo mảnh bằng JS
-      a.innerHTML = fileIconSvg + '<span class="fn"></span>';
-      a.querySelector(".fn").textContent = shortFileName(f.name);
-      item.appendChild(a);
-      var del = document.createElement("button");
-      del.type = "button"; del.className = "file-del";
-      del.setAttribute("data-fid", key);
-      del.setAttribute("data-id", row.id);
-      del.setAttribute("data-fkey", fkey);
-      del.setAttribute("title", "Xoá file");
-      del.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>';
-      item.appendChild(del);
-      list.appendChild(item);
-    });
+    if (PAIRED.indexOf(fkey) >= 0) {
+      // Cột ghép cặp bám theo cột PDF bên trái: MỖI file PDF một ô — có file thì
+      // hiện file, chưa có thì hiện ô trống cùng chiều cao kèm nút +. Nhìn ngang là
+      // biết file nào đi với bản PDF nào, và dòng nào còn thiếu.
+      var cap = capFile(row, fkey);
+      cap.slots.forEach(function (s) {
+        list.appendChild(s.kem ? fileItem(row, fkey, s.kem) : oTrongCad(fileKey(s.pdf)));
+      });
+      cap.roi.forEach(function (f) { list.appendChild(fileItem(row, fkey, f, true)); });
+    } else {
+      (Array.isArray(row[fkey]) ? row[fkey] : []).forEach(function (f) {
+        list.appendChild(fileItem(row, fkey, f));
+      });
+    }
     cell.appendChild(list);
 
     var add = document.createElement("button");
     add.type = "button"; add.className = "file-add";
     add.setAttribute("data-id", row.id);
+    // Cột ghép cặp có HAI loại nút +: nút của từng ô (gán thẳng vào dòng) và nút
+    // chung này. Nói rõ khác biệt, không thì người dùng bấm nhầm rồi tưởng hỏng.
+    if (PAIRED.indexOf(fkey) >= 0) {
+      add.setAttribute("title", "Tải file chưa gán vào dòng nào — gán sau bằng nút mũi tên");
+    }
     add.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>File</span>';
     cell.appendChild(add);
 
@@ -1632,13 +1851,24 @@
 
     var list = document.createElement("div");
     list.className = "note-list";
-    // Ghi chú cho cả hai cột "File đang trình" (PDF rồi DWG+Excel), theo đúng thứ
-    // tự hai cột đó xuất hiện bên trái. Hai cột file phía sau — "đã duyệt" và
-    // "chấp thuận" — không có ghi chú riêng, giữ nguyên như trước.
-    ["files", "filesCad"].forEach(function (fk) {
-      (Array.isArray(row[fk]) ? row[fk] : []).forEach(function (f) {
-        list.appendChild(makeNoteLine(row.id, "note:" + (f.uid || f.id || ""),
-          "Ghi chú cho file…", f.note, f.name || "file"));
+    // Ghi chú đi theo DÒNG file, không theo từng file: mỗi ô ghi chú nằm ngang đúng
+    // một cặp PDF–DWG bên trái. Ghi chú lưu ngay trên file PDF của dòng đó, nên xoá
+    // file PDF là ghi chú đi theo. Hai cột file phía sau — "đã duyệt" và "chấp
+    // thuận" — không có ghi chú riêng, giữ nguyên như trước.
+    var capN = PAIRED.map(function (fk) { return capFile(row, fk); });
+    (Array.isArray(row.files) ? row.files : []).forEach(function (p, i) {
+      // tooltip kể tên cả những file đi kèm ở các cột ghép cặp, để biết đang ghi
+      // chú cho bộ hồ sơ nào của dòng
+      var ten = [p.name || "file"];
+      capN.forEach(function (c) { if (c.slots[i] && c.slots[i].kem) ten.push(c.slots[i].kem.name || ""); });
+      list.appendChild(makeNoteLine(row.id, "note:" + fileKey(p), "Ghi chú cho file…", p.note, ten.join("  ·  ")));
+    });
+    // File chưa gán của từng cột ghép cặp vẫn giữ dòng ghi chú riêng: bỏ đi thì ghi
+    // chú của nó còn trong dữ liệu mà không ô nào hiện ra. Xếp sau khối ô nên phần
+    // này có thể lệch giữa hai cột — chấp nhận được, file chưa gán vốn là ngoại lệ.
+    capN.forEach(function (c) {
+      c.roi.forEach(function (f) {
+        list.appendChild(makeNoteLine(row.id, "note:" + fileKey(f), "Ghi chú cho file…", f.note, f.name || "file"));
       });
     });
     cell.appendChild(list);
@@ -1651,16 +1881,20 @@
     return td;
   }
   // CSV: tên file và mốc thời gian giữ nguyên thứ tự để đối chiếu được với nhau
-  function fileNamesCsv(a) { return (Array.isArray(a) ? a : []).map(function (f) { return f.name || ""; }).join("; "); }
-  // ghi chú của từng file, cùng thứ tự với tên file; ghi chú chung của cả dòng xếp sau cùng
-  // Cùng thứ tự với cột Ghi chú trên bảng: PDF trước, DWG+Excel sau, ghi chú
-  // chung của cả dòng xếp cuối.
+  function fileNamesCsv(a) { return (Array.isArray(a) ? a : []).map(function (f) { return (f && f.name) || ""; }).join("; "); }
+  // Cột ghép cặp xuất ra CSV theo ĐÚNG dòng như trên bảng: ô trống thành một mục
+  // rỗng để vị trí thứ i vẫn ứng với file PDF thứ i; file chưa gán xếp sau cùng.
+  function theoDong(row, fkey) {
+    var c = capFile(row, fkey);
+    return c.slots.map(function (sl) { return sl.kem; }).concat(c.roi);
+  }
+  // Ghi chú theo DÒNG, đúng thứ tự cột Ghi chú trên bảng: mỗi file PDF một mục
+  // (ghi chú của cả cặp PDF–DWG), rồi tới file DWG chưa gán, ghi chú chung xếp cuối.
   function notesCsv(row) {
     var out = [];
-    ["files", "filesCad"].forEach(function (fk) {
-      (Array.isArray(row[fk]) ? row[fk] : []).forEach(function (f) {
-        out.push(htmlToText(f.note || "").trim());
-      });
+    (Array.isArray(row.files) ? row.files : []).forEach(function (p) { out.push(htmlToText(p.note || "").trim()); });
+    PAIRED.forEach(function (fk) {
+      capFile(row, fk).roi.forEach(function (f) { out.push(htmlToText(f.note || "").trim()); });
     });
     var rn = htmlToText(row.ghiChu || "").trim();
     if (rn) out.push(rn);
@@ -1674,7 +1908,7 @@
     });
     return t;
   }
-  function fileTimesCsv(a) { return (Array.isArray(a) ? a : []).map(function (f) { return fmtUploadTime(f.uploadedAt) || "—"; }).join("; "); }
+  function fileTimesCsv(a) { return (Array.isArray(a) ? a : []).map(function (f) { return (f && fmtUploadTime(f.uploadedAt)) || "—"; }).join("; "); }
 
   // Đọc JSON an toàn: khi máy chủ trục trặc nó trả HTML/text, JSON.parse sẽ ném lỗi
   // khó hiểu ("Unexpected token <") che mất nguyên nhân thật.
@@ -1702,11 +1936,14 @@
   }
   // Tải 1 file lên S3: xin URL ký → PUT thẳng lên kho → báo máy chủ ghi metadata.
   // Dùng XMLHttpRequest chứ không dùng fetch vì fetch không báo được tiến độ tải LÊN.
-  function uploadDirect(proc, onProgress) {
+  // `fkey` đi kèm để máy chủ đóng dấu cột vào phiên tải lên: đó là căn cứ DUY NHẤT
+  // để sau này biết file có thuộc cột mở tự do hay không (client nói gì cũng không tính).
+  function uploadDirect(proc, onProgress, fkey) {
     return retryUp(function () {
       return fetch("api/files?action=sign-upload"
           + "&name=" + encodeURIComponent(proc.name)
           + "&type=" + encodeURIComponent(proc.type)
+          + "&cot=" + encodeURIComponent(fkey || "")
           + "&size=" + proc.blob.size,
           { method: "POST", headers: authHeaders() }).then(apiJson);
     }, 3).then(function (s) {
@@ -1780,8 +2017,10 @@
     if (add) add.setAttribute("data-up", String(Math.round(r * 100)));
   }
 
-  function handleFilesSelected(rowId, fkey, fileList) {
-    if (!canEdit()) return;
+  // `pairUid` chỉ dùng cho cột DWG+Excel: uid của file PDF mà file này đi kèm.
+  // Rỗng/không có = tải từ nút + chung ở cuối ô, để rời cho người dùng gán sau.
+  function handleFilesSelected(rowId, fkey, fileList, pairUid) {
+    if (!canEditCot(fkey)) return;
     if (!findRow(rowId) || !fileList || !fileList.length) return;
     var files = Array.prototype.slice.call(fileList);
     var serverUp = SERVER_MODE && storageMode === "server";
@@ -1808,9 +2047,12 @@
         if (!Array.isArray(freshRow[fkey])) freshRow[fkey] = [];
         j.file.uid = uid();
         j.file.uploadedAt = new Date().toISOString();
+        // Chọn nhiều file cho MỘT ô thì chỉ file đầu chiếm ô, phần còn lại để rời —
+        // một dòng chỉ có đúng một ô DWG, nhét cả mẻ vào là giấu mất file.
+        if (PAIRED.indexOf(fkey) >= 0) { j.file.pairUid = pairUid || ""; pairUid = ""; }
         freshRow[fkey].push(j.file);
         okCount++;
-        save();
+        luuFile(rowId, fkey);
       } finally {
         filesBusy = false;
       }
@@ -1825,7 +2067,7 @@
               toast("“" + file.name + "” quá lớn (" + fmtSize(proc.blob.size) + ") — tối đa " + fmtSize(MAX_UPLOAD));
               return;
             }
-            return uploadDirect(proc, function (r) { setUploadProgress(rowId, fkey, r); }).then(attach);
+            return uploadDirect(proc, function (r) { setUploadProgress(rowId, fkey, r); }, fkey).then(attach);
           });
         } else {
           if (file.size > 8 * 1024 * 1024) { toast("“" + file.name + "” quá lớn cho chế độ lưu cục bộ (tối đa 8MB — dùng máy chủ để được 500MB)"); return; }
@@ -1833,9 +2075,11 @@
             var lrow = findRow(rowId);
             if (!lrow) { toast("Dòng đã bị xoá trong lúc tải — file không được gắn"); return; }
             if (!Array.isArray(lrow[fkey])) lrow[fkey] = [];
-            lrow[fkey].push({ uid: uid(), name: file.name, size: file.size, type: file.type, dataUrl: dataUrl, uploadedAt: new Date().toISOString() });
+            var fMoi = { uid: uid(), name: file.name, size: file.size, type: file.type, dataUrl: dataUrl, uploadedAt: new Date().toISOString() };
+            if (PAIRED.indexOf(fkey) >= 0) { fMoi.pairUid = pairUid || ""; pairUid = ""; }
+            lrow[fkey].push(fMoi);
             okCount++;
-            save();
+            luuFile(rowId, fkey);
           });
         }
       }).catch(function (err) {
@@ -1871,6 +2115,9 @@
       id: f.id, rowId: rowId, fkey: fkey, rowName: rowName,
       uploadedAt: f.uploadedAt || "", note: f.note || "",
       viTri: viTri >= 0 ? viTri : 0,
+      // `pairUid` cũng chỉ sống trong document kế hoạch như uploadedAt và note:
+      // không chép sang đây thì khôi phục xong file DWG nằm rời, mất dòng của nó.
+      pairUid: f.pairUid || "",
     };
   }
 
@@ -1892,6 +2139,7 @@
               id: x.id, planId: state.planId,
               rowId: x.rowId || "", fkey: x.fkey || "files", rowName: x.rowName || "",
               uploadedAt: x.uploadedAt || "", note: x.note || "", viTri: x.viTri || 0,
+              pairUid: x.pairUid || "",
             };
           }),
         }),
@@ -1924,7 +2172,7 @@
   function closeFileDel() { fileDelModal.classList.remove("show"); pendingFileDel = null; }
 
   function removeFile(rowId, fkey, key) {
-    if (!canAdmin()) { toast("Chỉ quản trị mới được xoá file"); return; }
+    if (!canXoaFile(fkey)) { toast("Chỉ quản trị mới được xoá file"); return; }
     var row = findRow(rowId);
     if (!row || !Array.isArray(row[fkey])) return;
     var target = null;
@@ -1961,7 +2209,7 @@
       if (String(f.uid || f.id || "") === String(p.key)) { removed = f; viTri = i; return false; }
       return true;
     });
-    save(); render();
+    luuFile(p.rowId, p.fkey); render();
     if (!removed || !removed.id || !laMayChu()) return;
     trashFiles([hoSoRac(removed, p.rowId, p.fkey, tenDong(row), viTri)])
       .then(function () { toast("Đã chuyển “" + (removed.name || "file") + "” vào thùng rác"); })
@@ -2414,6 +2662,7 @@
       }
       tr.appendChild(makeFilesTd(row, "files"));           // File đang trình — PDF
       tr.appendChild(makeFilesTd(row, "filesCad"));        // File đang trình — DWG+Excel
+      tr.appendChild(makeFilesTd(row, "filesTvgs"));       // Ý kiến TVGS
       tr.appendChild(makeNoteTd(row));                     // Ghi chú
       tr.appendChild(makeFilesTd(row, "filesDuyet"));      // File đã duyệt
       tr.appendChild(makeFilesTd(row, "filesChapThuan"));  // Hồ sơ chấp thuận
@@ -2609,7 +2858,29 @@
     var radd = e.target.closest(".row-add");
     if (radd) { if (canEdit()) openRowAddPop(radd); return; }
     var fadd = e.target.closest(".file-add");
-    if (fadd) { if (!canEdit()) return; var finp = fadd.parentNode.querySelector(".file-input"); if (finp) { finp.value = ""; finp.click(); } return; }
+    if (fadd) {
+      // Nút + của một ô trống nằm sâu trong danh sách, KHÔNG còn là con trực tiếp
+      // của .files-cell như nút + chung — phải trèo lên bằng closest.
+      var fcAdd = fadd.closest(".files-cell");
+      if (!fcAdd || !canEditCot(fcAdd.getAttribute("data-fkey") || "files")) return;
+      var finp = fcAdd.querySelector(".file-input");
+      if (finp) {
+        finp.value = "";
+        var pr = fadd.getAttribute("data-pair");
+        // + của một dòng → gán vào đúng dòng đó và chỉ nhận MỘT file (dòng chỉ có
+        // một ô). Nút + chung ở cuối ô vẫn nhận nhiều file như trước.
+        if (pr === null) { finp.removeAttribute("data-pair"); finp.multiple = true; }
+        else { finp.setAttribute("data-pair", pr); finp.multiple = false; }
+        finp.click();
+      }
+      return;
+    }
+    var fup = e.target.closest(".file-pair-up");
+    if (fup) {
+      e.preventDefault();
+      ganVaoODau(fup.getAttribute("data-id"), fup.getAttribute("data-fkey") || "filesCad", fup.getAttribute("data-fid"));
+      return;
+    }
     var fdel = e.target.closest(".file-del");
     if (fdel) { e.preventDefault(); removeFile(fdel.getAttribute("data-id"), fdel.getAttribute("data-fkey") || "files", fdel.getAttribute("data-fid")); return; }
     var flink = e.target.closest(".file-link");
@@ -2763,7 +3034,8 @@
     }
     if (e.target.classList.contains("file-input")) {
       var fc = e.target.closest(".files-cell");
-      if (fc) handleFilesSelected(fc.getAttribute("data-id"), fc.getAttribute("data-fkey") || "files", e.target.files);
+      if (fc) handleFilesSelected(fc.getAttribute("data-id"), fc.getAttribute("data-fkey") || "files",
+        e.target.files, e.target.getAttribute("data-pair"));
       return;
     }
   });
@@ -3232,12 +3504,16 @@
     if (!Array.isArray(row[fkey])) row[fkey] = [];
     // uploadedAt lấy từ bản đã lưu lúc xoá. KHÔNG được lấy trashedAt: đó là thời
     // điểm vứt đi, không phải thời điểm tải lên — cột "Thời gian trình" sẽ sai.
-    chenLaiFile(row[fkey], {
+    var fileMoi = {
       id: it.id, name: it.name, size: it.size, type: it.type,
       url: "api/files?id=" + it.id,
       uploadedAt: it.uploadedAt || "",
       note: it.note || "",
-    }, it.viTri);
+    };
+    // Trả file DWG về đúng DÒNG cũ chứ không chỉ đúng ô: `pairUid` nói nó đi kèm
+    // file PDF nào. Bản ghi rác cũ không có trường này → file về dạng rời, gán tay.
+    if (PAIRED.indexOf(fkey) >= 0) fileMoi.pairUid = it.pairUid || "";
+    chenLaiFile(row[fkey], fileMoi, it.viTri);
     trashBusy = true;
     setTrashProg("Đang khôi phục…");
     var mtimeCu = serverMtime;
@@ -3276,6 +3552,7 @@
         '<label class="pick-field">Cột file<select class="pick-col">' +
           '<option value="files">File đang trình — PDF</option>' +
           '<option value="filesCad">File đang trình — DWG + Excel</option>' +
+          '<option value="filesTvgs">Ý kiến TVGS</option>' +
           '<option value="filesDuyet">File đã duyệt</option>' +
           '<option value="filesChapThuan">Hồ sơ chấp thuận</option>' +
         '</select></label></div>' +
@@ -3561,12 +3838,15 @@
     { key: "check",          label: "",                     w: 40, lock: true },
     { key: "stt",            label: "STT",                  w: 88 },
     { key: "hangMuc",        label: "Hạng mục",             w: 340 },
-    { key: "chiTiet",        label: "Thông tin chi tiết",   w: 300 },
-    { key: "nguoiLam",       label: "Người làm",            w: 220 },
+    // `off: true` = ẩn theo MẶC ĐỊNH, cho mọi quyền. Chỉ quản trị bật lại được,
+    // và chỉ trên máy của họ (tuỳ chọn nằm ở localStorage).
+    { key: "chiTiet",        label: "Thông tin chi tiết",   w: 300, off: true },
+    { key: "nguoiLam",       label: "Người làm",            w: 220, off: true },
     { key: "tienDo",         label: "Tiến độ kế hoạch",     w: 130 },
     { key: "tinhTrang",      label: "Tình trạng hồ sơ",     w: 160 },
     { key: "files",          label: "File đang trình (PDF)",        w: 140 },
     { key: "filesCad",       label: "File đang trình (DWG + Excel)", w: 140 },
+    { key: "filesTvgs",      label: "Ý kiến TVGS",          w: 140 },
     { key: "ghiChu",         label: "Ghi chú",              w: 200 },
     { key: "filesDuyet",     label: "File đã duyệt",        w: 140 },
     { key: "filesChapThuan", label: "Hồ sơ chấp thuận",     w: 140 }
@@ -3582,12 +3862,22 @@
   ];
 
   var VIEW_KEY = "bangHangMuc.view.v1";
-  var view = { colW: {}, colHide: {}, rowH: {}, density: "normal" };
+  // Bố cục mặc định lấy từ cờ `off` trong COLUMNS. Dựng lại mỗi lần thay vì hằng
+  // số chép tay: thêm cột mới chỉ cần đặt cờ ở một chỗ.
+  function colHideMacDinh() {
+    var o = {};
+    COLUMNS.forEach(function (c) { if (c.off) o[c.key] = true; });
+    return o;
+  }
+  var view = { colW: {}, colHide: colHideMacDinh(), rowH: {}, density: "normal" };
   function loadView() {
     try {
       var v = JSON.parse(localStorage.getItem(VIEW_KEY));
       if (!v || typeof v !== "object") return;
-      view.colW = v.colW || {}; view.colHide = v.colHide || {}; view.rowH = v.rowH || {};
+      view.colW = v.colW || {}; view.rowH = v.rowH || {};
+      // `v.colHide` có thể là {} một cách CỐ Ý — quản trị đã bật hết cột lên. Chỉ
+      // lùi về mặc định khi trường đó thật sự vắng mặt, chứ không phải khi nó rỗng.
+      view.colHide = v.colHide && typeof v.colHide === "object" ? v.colHide : colHideMacDinh();
       if (DENSITY.some(function (d) { return d.key === v.density; })) view.density = v.density;
     } catch (e) {}
   }
@@ -3600,12 +3890,14 @@
   // bề rộng cột + cột ẩn + độ cao ô đổ vào một thẻ style động, không phải sờ tới từng ô
   var viewStyle = document.createElement("style");
   document.head.appendChild(viewStyle);
-  // Chỉ xem → luôn dựng theo mặc định. Tuỳ chọn riêng vẫn nằm yên trong localStorage
-  // và quay lại khi đăng nhập, nếu không người mất quyền sẽ kẹt với bố cục không sửa được.
+  // Không phải quản trị → luôn dựng theo MẶC ĐỊNH (cờ `off` trong COLUMNS), bỏ qua
+  // mọi tuỳ chọn riêng. Tuỳ chọn đó vẫn nằm yên trong localStorage và quay lại khi
+  // đăng nhập quản trị, nếu không người mất quyền sẽ kẹt với bố cục không sửa được.
   function applyView() {
-    var css = [], total = 0, on = canEdit();
+    var css = [], total = 0, on = canAdmin();
     COLUMNS.forEach(function (c) {
-      if (on && !c.lock && view.colHide[c.key]) { css.push('[data-ck="' + c.key + '"]{display:none}'); return; }
+      var an = on ? view.colHide[c.key] : c.off;
+      if (!c.lock && an) { css.push('[data-ck="' + c.key + '"]{display:none}'); return; }
       var w = (c.lock || !on) ? c.w : Math.max(MIN_COL_W, view.colW[c.key] || c.w);
       total += w;
       css.push('table th[data-ck="' + c.key + '"]{width:' + w + 'px}');
@@ -3703,7 +3995,7 @@
          '<span class="view-note">' + (hid ? hid + " dòng" : "Không có dòng nào") + '</span>' +
          '<button type="button" class="view-link" data-act="unhide"' + (hid ? "" : " disabled") + '>Hiện lại tất cả</button></div>' +
          '<div class="view-sec">Đặt lại</div><div class="view-row">' +
-         '<span class="view-note">Bề rộng cột &amp; độ cao dòng</span>' +
+         '<span class="view-note">Cột hiển thị, bề rộng &amp; độ cao dòng</span>' +
          '<button type="button" class="view-link" data-act="reset">Về mặc định</button></div>';
     viewPop.innerHTML = h;
     // tên cột gán bằng textContent để khỏi phải lo thoát ký tự HTML
@@ -3720,7 +4012,7 @@
   function closeViewPop() { viewPop.classList.remove("show"); }
 
   viewPop.addEventListener("click", function (e) {
-    if (!canEdit()) return;
+    if (!canAdmin()) return;
     var db = e.target.closest(".dens-btn");
     if (db) { view.density = db.getAttribute("data-dens"); applyView(); saveView(); renderViewPop(); return; }
     var lk = e.target.closest(".view-link");
@@ -3731,13 +4023,16 @@
       save(); render(); renderViewPop();
       toast("Đã hiện lại " + n + " dòng");
     } else {
+      // Đặt lại cả danh sách cột hiển thị: không có nó thì quản trị lỡ bật hết cột
+      // lên sẽ phải tắt tay từng cái để về lại bố cục mặc định.
       view.colW = {}; view.rowH = {}; view.density = "normal";
+      view.colHide = colHideMacDinh();
       applyView(); saveView(); render(); renderViewPop();
-      toast("Đã đặt lại bề rộng cột và độ cao dòng");
+      toast("Đã đặt lại bố cục bảng về mặc định");
     }
   });
   viewPop.addEventListener("change", function (e) {
-    if (!canEdit()) return;
+    if (!canAdmin()) return;
     var cb = e.target.closest("input[data-col]");
     if (!cb) return;
     var key = cb.getAttribute("data-col");
@@ -3751,7 +4046,7 @@
     if (e.key === "Escape" && viewPop.classList.contains("show")) { e.preventDefault(); closeViewPop(); }
   });
   btnView.addEventListener("click", function () {
-    if (!canEdit()) return;
+    if (!canAdmin()) return;
     if (viewPop.classList.contains("show")) closeViewPop(); else openViewPop();
   });
 
@@ -3788,7 +4083,8 @@
       lines.push([codes[i], htmlToText(r.hangMuc), htmlToText(r.chiTiet),
         (r.nguoiLam || []).join("; "), htmlToText(r.tienDo), htmlToText(r.tinhTrang),
         fileNamesCsv(r.files), fileTimesCsv(r.files),
-        fileNamesCsv(r.filesCad), fileTimesCsv(r.filesCad),
+        fileNamesCsv(theoDong(r, "filesCad")), fileTimesCsv(theoDong(r, "filesCad")),
+        fileNamesCsv(theoDong(r, "filesTvgs")), fileTimesCsv(theoDong(r, "filesTvgs")),
         notesCsv(r),
         fileNamesCsv(r.filesDuyet), fileTimesCsv(r.filesDuyet),
         fileNamesCsv(r.filesChapThuan), fileTimesCsv(r.filesChapThuan)].map(esc).join(","));
@@ -3934,6 +4230,9 @@
     FKEYS.forEach(function (fk) {
       if (!Array.isArray(r[fk])) r[fk] = [];
       else r[fk] = r[fk].filter(function (f) { return f && typeof f === "object" && (f.url || f.dataUrl); });
+      // uid là khoá ghép cặp PDF ↔ DWG. File cũ chưa có thì lấy luôn `id` của kho
+      // làm uid — giữ nguyên khoá mà ghi chú và nút xoá vẫn đang dùng, không lệch.
+      r[fk].forEach(function (f) { if (!f.uid) f.uid = f.id || uid(); });
     });
 
     // Chuyển đổi một lần cho dữ liệu có trước 09/2026: hồi đó "File đang trình"
@@ -3948,6 +4247,26 @@
       });
       if (chuyen.length) { r.files = giu; r.filesCad = chuyen; }
     }
+
+    // Ghép cặp một lần cho dữ liệu cũ: trước đây hai cột "File đang trình" là hai
+    // danh sách rời, nhìn vào không biết bản DWG nào ứng với bản PDF nào. Ghép theo
+    // đúng thứ tự đang hiện — file DWG thứ i về với file PDF thứ i; thừa ra thì để
+    // rời. Chỉ chạy khi CẢ dòng chưa file nào có `pairUid`: sau lần đầu mọi file
+    // mới đều tự mang sẵn, ghép lại là đè lên lựa chọn của người dùng.
+    PAIRED.forEach(function (fk) {
+      var daGhep = r[fk].some(function (f) { return f.pairUid !== undefined; });
+      if (daGhep) return;
+      r[fk].forEach(function (f, i) {
+        var p = r.files[i];
+        f.pairUid = p ? fileKey(p) : "";
+        // Ghi chú nay đi theo DÒNG (lưu ở file PDF), nên ghi chú cũ gắn riêng ở file
+        // đi kèm sẽ không còn ô nào hiện ra. Dồn vào ghi chú của dòng thay vì để mất.
+        if (p && f.note) {
+          p.note = p.note ? (p.note + "<br>" + f.note) : f.note;
+          f.note = "";
+        }
+      });
+    });
   }
 
   function finishInit() {

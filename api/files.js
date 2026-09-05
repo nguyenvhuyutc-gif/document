@@ -45,7 +45,11 @@ const MAX_UPLOAD = 500 * 1024 * 1024;       // giới hạn 1 file (S3 không gi
 // Bốn cột file của một dòng trong document kế hoạch. Phải khớp với hằng FKEYS ở
 // bang-hang-muc.html — thiếu một cột ở đây thì lớp tự chữa lành của thùng rác coi
 // file trong cột đó là rác và vẫn liệt kê nó dù bảng đang dùng.
-const FKEYS = ["files", "filesCad", "filesDuyet", "filesChapThuan"];
+const FKEYS = ["files", "filesCad", "filesTvgs", "filesDuyet", "filesChapThuan"];
+
+// Cột mở cho MỌI người, kể cả không có mật khẩu (bên tư vấn giám sát không cầm mật
+// khẩu của chủ đầu tư). Phải khớp COT_TU_DO ở api/data.js và bang-hang-muc.html.
+const COT_TU_DO = "filesTvgs";
 
 const TRASH_TTL = 30 * 24 * 60 * 60 * 1000;   // file nằm thùng rác 30 ngày rồi tự xoá
 // Dọn quá hạn chạy ngay trong request liệt kê thùng rác, mà mỗi lần xoá là một
@@ -205,10 +209,20 @@ module.exports = async (req, res) => {
     //
     // Nút thùng rác ở giao diện bị ẩn khi không phải quản trị, nhưng canAdmin() bên
     // đó chỉ ẩn nút — ai mở DevTools cũng gọi thẳng được. Hàng rào thật nằm ở đây.
+    //
+    // NGOẠI LỆ: cột "Ý kiến TVGS" mở cho người không mật khẩu, nhưng CHỈ hai việc —
+    // tải lên và bỏ vào thùng rác. Cờ dưới đây mới chỉ mở cửa; việc "có đúng là file
+    // của cột đó không" được kiểm trong từng nhánh bằng trường `cot` do CHÍNH máy chủ
+    // đóng lúc ký URL. Không bao giờ tin tham số client gửi kèm lúc xoá.
+    const role = getRole(req);
+    const cot = url.searchParams.get("cot") || "";
+    const khach = role !== "admin" && role !== "edit";
+    const khachDuocPhep = khach && (
+      (action === "sign-upload" && cot === COT_TU_DO) || action === "confirm" || action === "trash"
+    );
     const laThungRac = action === "trash" || action === "restore"
       || (req.method === "GET" && url.searchParams.get("trash"));
-    if (laThungRac || req.method === "POST" || req.method === "DELETE") {
-      const role = getRole(req);
+    if (!khachDuocPhep && (laThungRac || req.method === "POST" || req.method === "DELETE")) {
       if ((laThungRac || req.method === "DELETE") && role !== "admin") {
         res.status(401).json({ ok: false, needKey: true, error: "Cần mật khẩu quản trị" });
         return;
@@ -253,7 +267,12 @@ module.exports = async (req, res) => {
       // người khác (key KHÔNG phải bí mật — nó nằm trong path của mọi URL đã ký),
       // confirm gọi lại lần hai không vỡ, và script dọn có danh sách pending có
       // thẩm quyền thay vì đoán theo tuổi file.
-      await col.insertOne({ _id: newId, name, type, key, status: "pending", createdAt: Date.now() });
+      // `cot` là DẤU của máy chủ: về sau confirm và thùng rác dựa vào nó để biết file
+      // có thuộc cột mở tự do hay không. Đóng ngay lúc ký, khi còn biết chắc ai xin.
+      await col.insertOne({
+        _id: newId, name, type, key, status: "pending", createdAt: Date.now(),
+        cot: FKEYS.indexOf(cot) >= 0 ? cot : "",
+      });
       res.status(200).json({ ok: true, id: newId, key, uploadUrl });
       return;
     }
@@ -267,6 +286,11 @@ module.exports = async (req, res) => {
       const doc = await col.findOne({ _id: id });
       if (!doc || doc.key !== key) {
         res.status(400).json({ ok: false, error: "Phiên tải lên không hợp lệ" });
+        return;
+      }
+      // Khách chỉ xác nhận được đúng phiên mà chính họ đã xin cho cột mở tự do.
+      if (khach && doc.cot !== COT_TU_DO) {
+        res.status(401).json({ ok: false, needKey: true, error: "Cần mật khẩu quyền sửa để tải file lên" });
         return;
       }
       // Idempotent: retryUp ở client bọc lời gọi này, nên khi lần đầu thành công mà
@@ -364,6 +388,27 @@ module.exports = async (req, res) => {
         return;
       }
 
+      // Khách: mọi file trong mẻ phải mang dấu `cot` của cột mở tự do. Kiểm bằng
+      // document file chứ KHÔNG bằng `it.fkey` client gửi — trường đó giả được, và
+      // giả xong là xoá sạch file ở cột khác.
+      //
+      // Cố ý không kiểm "file có đang nằm trong bảng không": giao diện gỡ file khỏi
+      // bảng TRƯỚC rồi mới gọi vào đây, nên lúc này nó đã không còn trong document.
+      if (khach) {
+        const ids = items.map((x) => String((x && x.id) || "")).filter(Boolean);
+        const docs = ids.length
+          ? await col.find({ _id: { $in: ids } }).project({ cot: 1 }).toArray()
+          : [];
+        const hopLe = new Set(docs.filter((d) => d.cot === COT_TU_DO).map((d) => String(d._id)));
+        if (ids.length !== items.length || items.some((x) => !hopLe.has(String(x.id)))) {
+          res.status(401).json({
+            ok: false, needKey: true,
+            error: "Không có mật khẩu thì chỉ xoá được file ở cột Ý kiến TVGS",
+          });
+          return;
+        }
+      }
+
       const now = Date.now();
       const ops = [];
       for (const it of items) {
@@ -393,6 +438,9 @@ module.exports = async (req, res) => {
                   uploadedAt: String(it.uploadedAt || ""),
                   note: String(it.note || "").slice(0, 4000),
                   viTri: Number(it.viTri) >= 0 ? Number(it.viTri) : 0,
+                  // pairUid: file DWG này đi kèm file PDF nào. Cùng lý do như trên —
+                  // chỉ có trong document kế hoạch, mất là khôi phục xong nằm rời dòng.
+                  pairUid: String(it.pairUid || "").slice(0, 64),
                 },
               },
             },
@@ -474,6 +522,7 @@ module.exports = async (req, res) => {
           uploadedAt: o.uploadedAt || "",
           note: o.note || "",
           viTri: typeof o.viTri === "number" ? o.viTri : 0,
+          pairUid: o.pairUid || "",
           // File cũ nằm trong MongoDB không có key nên không xin được URL ký —
           // client phải tải nó theo đường khác.
           onS3: !!d.key,

@@ -203,7 +203,7 @@ try {
       // Bốn cột file — khớp FKEYS ở api/files.js và bang-hang-muc.html. Thiếu một
       // cột ở đây thì mọi file trong cột đó bị báo là rác, và ai tin báo cáo mà
       // xoá tay là mất dữ liệu thật.
-      for (const fk of ["files", "filesCad", "filesDuyet", "filesChapThuan"]) {
+      for (const fk of ["files", "filesCad", "filesTvgs", "filesDuyet", "filesChapThuan"]) {
         for (const f of (Array.isArray(row[fk]) ? row[fk] : [])) if (f && f.id) idDuocTro.add(String(f.id));
       }
     }

@@ -18,6 +18,7 @@ quyền deploy, nhưng dùng chung MongoDB nên dữ liệu hai bên giống nha
 | `api/files.js` | Ký presigned URL cho S3 + ghi metadata file vào MongoDB |
 | `scripts/kiem-tra-cau-hinh.mjs` | Kiểm `.env` + MongoDB + S3 ở máy — an toàn, chạy lúc nào cũng được |
 | `scripts/don-file-mo-coi.mjs` | Dọn file mồ côi trên S3 — chạy tay, xoá được dữ liệu thật |
+| `scripts/thu-quyen-tvgs.mjs` | Kiểm phân quyền THẬT của cột mở tự do — **chạy lại sau mỗi lần đụng `api/data.js` hoặc `api/files.js`** |
 | `vercel.json` | Rewrite trang gốc + CORS + `functions.maxDuration` |
 | `serve.cjs`, `start-server.bat`, `data.json` | **Tư liệu, KHÔNG chạy được nữa** — xem § Bản LAN |
 
@@ -38,14 +39,41 @@ trông y hệt lỗi cache.
 
 ## Cột file
 
-Một dòng có **bốn** mảng file, hằng `FKEYS` giữ danh sách:
+Một dòng có **năm** mảng file, hằng `FKEYS` giữ danh sách:
 
-| Mảng | Cột trên bảng |
-|---|---|
-| `files` | File đang trình — **PDF** |
-| `filesCad` | File đang trình — **DWG + Excel** (và mọi đuôi khác) |
-| `filesDuyet` | File đã duyệt |
-| `filesChapThuan` | Hồ sơ chấp thuận |
+| Mảng | Cột trên bảng | Ghép cặp theo dòng |
+|---|---|---|
+| `files` | File đang trình — **PDF** | cột gốc, các cột khác bám theo nó |
+| `filesCad` | File đang trình — **DWG + Excel** (và mọi đuôi khác) | có |
+| `filesTvgs` | **Ý kiến TVGS** — mở cho mọi quyền, xem § Phân quyền | có |
+| `filesDuyet` | File đã duyệt | không |
+| `filesChapThuan` | Hồ sơ chấp thuận | không |
+
+**Ghép cặp theo dòng (09/2026):** hằng `PAIRED` liệt kê các cột bám theo cột PDF
+— hiện là `filesCad` và `filesTvgs`. Mỗi file trong một cột như vậy mang `pairUid`
+= `uid` của file PDF nó đi kèm; chuỗi rỗng = chưa gán. Cột ghép cặp dựng **một ô
+cho mỗi file PDF** — ô trống hiện nút `+` riêng của dòng đó — nên nhìn ngang là
+biết file nào ứng với bản PDF nào. Ghép bằng **khoá chứ không bằng vị trí**: mảng
+vẫn dày, mọi chỗ đếm file / xoá / thùng rác / CSV giữ nguyên cách duyệt cũ.
+`capFile(row, fkey)` là chỗ **duy nhất** tính chuyện này, trả `{slots, roi}` với ô
+đã ghép nằm ở `.kem`; `roi` gom file chưa gán **và** file trỏ vào PDF đã xoá — để
+không file nào biến mất khỏi bảng.
+
+**Thêm một cột ghép cặp nữa** chỉ cần: thêm tên vào `PAIRED` + `FKEYS` (ba nơi),
+thêm mục trong `COLUMNS`, thêm `<th>`, thêm `appendChild` trong `render()`, thêm
+cặp cột trong `HEADERS` và `lines.push([...])` của CSV, thêm `<option>` trong hộp
+"Chọn chỗ khôi phục". Mọi chỗ còn lại đọc `PAIRED` chứ không ghi cứng tên cột.
+
+Phần **file chưa gán** (`roi`) của mỗi cột xếp ngay dưới khối ô của chính cột đó,
+nên khi hai cột có số file chưa gán khác nhau thì phần dưới ấy lệch nhau — cố ý:
+file chưa gán vốn là ngoại lệ hiếm, đệm cho thẳng hàng chỉ tốn chỗ mà vẫn không nói
+được ghi chú thuộc về file nào.
+
+Kéo theo hai điều dễ quên: **ghi chú đi theo dòng** (lưu ở file PDF, không phải ở
+file đi kèm — nên mọi chỗ chuyển một file vào ô đều phải dồn ghi chú của nó sang
+file PDF), và `pairUid` phải **đi cùng file vào thùng rác** — `hoSoRac()` cùng hai
+whitelist trong `api/files.js` đều chép nó, thiếu là khôi phục xong file nằm rời,
+mất dòng. `node scratch/thu-ghep-cap-file.mjs` canh toàn bộ những điều trên.
 
 `FKEYS` **được chép ở ba nơi** — `bang-hang-muc.html`, `api/files.js`,
 `scripts/don-file-mo-coi.mjs` — và cả ba phải khớp. Thiếu một cột ở `api/files.js`
@@ -59,6 +87,23 @@ lý do đó.
 
 Ba cột "Thời gian" đã bỏ (09/2026) — mốc tải lên xem ở tooltip của file. **CSV vẫn
 giữ** các cột đó: file CSV không có tooltip.
+
+## Bố cục bảng
+
+Cột nào hiện mặc định là do cờ `off` trong `COLUMNS` quyết định — hiện `chiTiet`
+và `nguoiLam` mang cờ đó nên **ẩn với mọi quyền**. Thêm cột ẩn mặc định chỉ cần
+đặt cờ, `colHideMacDinh()` tự đọc ra.
+
+Menu **"Hiển thị"** (ẩn/hiện cột, độ cao dòng, bề rộng cột, hiện lại dòng đã ẩn)
+**chỉ quản trị mở được** — `canAdmin()`, không phải `canEdit()`. Nút, popup và tay
+kéo cột đều ẩn với người khác, và ba handler đều kiểm quyền lại ở JS. Tuỳ chọn của
+quản trị lưu ở `localStorage`, **riêng từng máy** — đổi cột không ảnh hưởng ai khác.
+
+`applyView()` bỏ qua `view.colHide` khi không phải quản trị và dựng theo cờ `off`.
+Đừng đổi thành "ẩn menu là đủ": tuỳ chọn cũ trong `localStorage` sẽ vẫn áp vào
+người vừa mất quyền.
+
+`node scratch/thu-cau-truc-cot.mjs` canh toàn bộ những điều trên.
 
 ## Môi trường
 
@@ -97,6 +142,24 @@ API dùng 2 mật khẩu đặt qua biến môi trường trên Vercel:
   thùng rác** (liệt kê, khôi phục, xoá vĩnh viễn).
 - Xem/tải file xuống (GET) tự do — **trừ file đang nằm trong thùng rác**, thứ chỉ
   quản trị tải được. **Không đặt cả hai biến → không khoá gì** (tương thích cũ).
+
+**Ngoại lệ có chủ ý — cột "Ý kiến TVGS" (`filesTvgs`):** ai mở được trang cũng tải
+file lên và bỏ vào thùng rác được ở **riêng cột đó**, không cần mật khẩu — bên tư
+vấn giám sát không cầm mật khẩu của chủ đầu tư. Ba chốt giữ cho ngoại lệ này không
+loang ra chỗ khác:
+
+1. Họ **không POST được cả document**. Đường ghi thường vẫn đòi `EDIT_KEY`; cột này
+   đi lối riêng `POST /api/data?action=tvgs&plan=&row=` chỉ thay đúng một mảng của
+   đúng một dòng (dùng `arrayFilters`, không đọc-sửa-ghi cả bảng ở client).
+2. Mọi mục gửi lên bị `locFileTvgs()` lọc về đúng các trường đã biết, và **id phải
+   là file mang dấu `cot: "filesTvgs"`** — dấu này do `api/files.js` đóng lúc ký URL
+   tải lên, không phải thứ client khai.
+3. Thùng rác cho khách cũng kiểm bằng dấu `cot` đó, **không** tin `fkey` client gửi.
+   Khôi phục, xoá vĩnh viễn và xem thùng rác vẫn chỉ quản trị.
+
+Đổi lại: **ai có link cũng tải được file lên cột đó** (tới 500MB/file) và bỏ được ý
+kiến của người khác vào thùng rác — quản trị khôi phục lại được trong 30 ngày. Muốn
+siết thì thêm một mật khẩu riêng cho TVGS thay vì mở tự do.
 
 Client gửi mật khẩu qua header `x-edit-key` (lưu localStorage, nhập ở nút đăng
 nhập trên giao diện). Endpoint `GET /api/data?whoami=1` trả `{role, protected}`

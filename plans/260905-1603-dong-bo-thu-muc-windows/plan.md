@@ -50,7 +50,7 @@ Làm song song bởi bốn phiên, mỗi phiên sở hữu trọn một file (xe
 Trần 260 **không còn là ràng buộc của việc ghi** — chỉ còn là ràng buộc của Explorer
 và CAD trên máy trạm.
 
-## Bảy bẫy đã tìm ra và bịt
+## Tám bẫy đã tìm ra và bịt
 
 Ghi đủ trong `scripts/dong-bo/HOP-DONG.md` § Bẫy đã biết. Ba cái đắt nhất:
 

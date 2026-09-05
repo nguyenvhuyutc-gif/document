@@ -148,11 +148,41 @@ const TU_BO = /^(CAC|TU|DEN|VA|TRU|MO|NHIP)$/i;
 // Giữ mã quyển, viết tắt cụm chữ mô tả, giữ MÃ TRỤ ĐẦU TIÊN. Không khớp dạng
 // "QUYỂN <mã>:" thì giữ nguyên chữ và chỉ cắt gọn — "THOÁT NƯỚC MẶT CẦU" viết tắt
 // thành "TNMC" là mất nghĩa, không đáng.
-// Mã trụ: bắt đầu bằng chữ, có ít nhất một chữ số. "SD-CTP-T47" · "T56-T" · "M2".
-// KHÔNG khớp "(55+90+55)" — đó là khẩu độ nhịp, không phải mã trụ; nhận nhầm nó
-// thì tên thư mục thành "I.3-2 KCDLT (55+90+55)".
-const LA_MA_TRU = /^[A-Z][A-Z0-9-]*\d[A-Z0-9-]*$/i;
 const LA_TU_THUAN = /^[A-Z]+$/i;
+
+// Mã trụ/mố: T<số> hoặc M<số>. TIỀN TỐ ĐỊNH DANH CẦU BỊ BỎ — "SD-CTP", "SD-CTT",
+// "CTP/T", "SHP/SHT" chỉ nói bản vẽ thuộc cầu nào, mà thư mục Tập đã nói điều đó rồi.
+// Thứ người tìm bản vẽ cần là DẢI TRỤ mà quyển phủ.
+//
+// Ranh giới từ ở hai đầu là chốt quan trọng: nó khiến "KM29+877" KHÔNG khớp "M29"
+// (trước M là chữ K), và "(55+90+55)" không khớp gì cả.
+const MA_TRU_MO = /\b[TM]\d+\b/gi;
+
+// Nhiều nhất bấy nhiêu mã trong một tên danh sách. Quá thì rút về đầu+cuối — vẫn giữ
+// dấu phẩy để không nói dối rằng đó là dải liên tục. Đặt ngưỡng vì tên còn phải lọt
+// DAI_QUYEN, mà cắt cụt giữa một mã ("T50" thành "T5") thì sai hẳn số hiệu trụ.
+const MAX_MA_LIET_KE = 3;
+
+// DẤU GẠCH ngụ ý dải LIÊN TỤC, DẤU PHẨY là danh sách RỜI RẠC. Phân biệt được là
+// quan trọng thật: quyển I.2-2 chỉ có trụ T47 và T50, không có T48/T49 — đặt tên
+// "T47-T50" thì người đi tìm bản vẽ trụ T49 mở nhầm thư mục rồi không thấy gì.
+//
+//   "TỪ SD-CTP-T51 ĐẾN SD-CTP-T55"                → T51-T55  (dải, nguồn có ĐẾN)
+//   "TRỤ SHP/T-T43 ĐẾN MỐ SHP/SHT - M2"           → T43-M2   (dải, mố là mốc hợp lệ)
+//   "CÁC TRỤ …T47, …T47, …T48, …T48"              → T47,T48  (liệt kê, không có ĐẾN)
+//   "CÁC TRỤ …T43, …T43 VÀ …T44, …T44"            → T43,T44  (liệt kê, nối bằng VÀ)
+//   "CÁC TRỤ SD-CTP-T47, SD-CTT-T47"              → T47      (một trụ ghi hai lần)
+//
+// "T56-T / T56-P" là trái/phải CÙNG một trụ chứ không phải hai đầu dải — gộp trùng
+// lặp xử lý luôn chuyện đó.
+export function daiTruMo(moTa) {
+  const s = String(moTa);
+  const ds = [...new Set((s.match(MA_TRU_MO) || []).map((x) => x.toUpperCase()))];
+  if (!ds.length) return "";
+  if (ds.length === 1) return ds[0];
+  if (/\bDEN\b/i.test(s)) return ds[0] + "-" + ds[ds.length - 1];
+  return (ds.length <= MAX_MA_LIET_KE ? ds : [ds[0], ds[ds.length - 1]]).join(",");
+}
 
 export function rutTenQuyen(chu) {
   // Tách mã quyển TRƯỚC khi lamSach: lamSach biến dấu ":" thành "-", sau đó
@@ -164,18 +194,18 @@ export function rutTenQuyen(chu) {
 
   const maQuyen = m[1];
   // Mã trụ hay bị khoảng trắng chen vào quanh dấu gạch ("SHP/T -T46" → "SHP-T -T46").
-  // Không nối lại thì token "-T46" cụt đầu và phần chữ nuốt mất "SHP-T".
+  // Không nối lại thì "-T46" cụt đầu và phần chữ nuốt mất "SHP-T".
   const moTa = lamSach(m[2]).replace(/\s*-\s*/g, "-").replace(/^[-,\s]+/, "");
 
+  // Phần chữ chỉ lấy tới mã trụ ĐẦU TIÊN — sau đó toàn là mã và từ nối.
   const chuDau = [];
-  let maTru = "";
   for (const w of moTa.split(/[\s,]+/).filter(Boolean)) {
-    if (LA_MA_TRU.test(w)) { maTru = w.replace(/[,.]+$/, ""); break; }
+    if (/\b[TM]\d+\b/i.test(w)) break;
     if (LA_TU_THUAN.test(w)) chuDau.push(w);
-    // token còn lại (ngoặc, số trần, ký hiệu) bỏ qua — không phải chữ, không phải mã trụ
+    // token còn lại (ngoặc, số trần, ký hiệu) bỏ qua
   }
   const tat = chuDau.filter((w) => !TU_BO.test(w)).map((w) => w[0]).join("").toUpperCase();
-  return catGon([maQuyen, tat, maTru].filter(Boolean).join(" "), DAI_QUYEN);
+  return catGon([maQuyen, tat, daiTruMo(moTa)].filter(Boolean).join(" "), DAI_QUYEN);
 }
 
 // `cap` quyết định quy tắc. `daDung` là Set tên đã dùng TRONG CÙNG thư mục cha.

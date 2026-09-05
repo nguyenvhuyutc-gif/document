@@ -24,8 +24,8 @@ Chạy tay thì bấm đúp `dong-bo.bat`. Tài liệu này nói về việc đ�
 4. `THU_MUC_GOC` phải là **UNC**, không phải ổ map:
 
    ```
-   ✔ THU_MUC_GOC=\\<ten-nas>\projects\<share>\2026\<thu-muc-du-an>
-   ✘ THU_MUC_GOC=Z:\<thu-muc-du-an>
+   ✔ THU_MUC_GOC=\\<ten-nas>\projects\<share>\2026\<thu-muc-du-an>\04.WEB
+   ✘ THU_MUC_GOC=Z:\<thu-muc-du-an>\04.WEB
    ```
 
    Ổ map chỉ tồn tại trong phiên đăng nhập của người đã map nó. Task Scheduler
@@ -69,7 +69,7 @@ Mở **Task Scheduler** → *Create Task* (không phải *Create Basic Task*).
 | Conditions | **Bỏ tick** *Start the task only if the computer is on AC power* (nếu là laptop). Bỏ tick *Stop if the computer switches to battery power* |
 | Settings | Tick *Stop the task if it runs longer than* → **2 hours**. Chọn *Do not start a new instance* ở ô cuối |
 
-**"Do not start a new instance"** là quan trọng: lần đầu kéo 624 MB có thể lâu hơn
+**"Do not start a new instance"** là quan trọng: lần đầu kéo 588 MB có thể lâu hơn
 15 phút, và không có mục này thì Windows chồng tác vụ lên nhau.
 
 ---
@@ -78,15 +78,32 @@ Mở **Task Scheduler** → *Create Task* (không phải *Create Basic Task*).
 
 | | |
 |---|---|
-| Thư mục gốc | `\\<ten-nas>\projects\<share>\2026\<thu-muc-du-an>` (69 ký tự) |
+| Thư mục gốc | `\\<ten-nas>\projects\<share>\2026\<thu-muc-du-an>\04.WEB` (76 ký tự) |
 | Cây dựng ra | **195 thư mục** — 45 thư mục dòng + thư mục cột của các dòng có file |
-| File phải kéo về lần đầu | ~30 file, khoảng 624 MB |
+| File kéo về lần đầu | 30 file, 588,5 MB |
+| Đường dẫn dài nhất thật | 206 ký tự — vẫn dưới trần 260 của Explorer |
 
 Lần chạy đầu là lần lâu nhất. Từ lần thứ hai trở đi chỉ đụng phần thay đổi, thường
 xong trong vài chục giây.
 
-Thư mục cũ của công ty (`01.MANEGER`, `02.INPUT`, `03.OUTPUT`, `260728`…) **không bị
-đụng tới** — script chỉ đọc và sửa thư mục có dấu `.bim-id` do chính nó tạo.
+**Cây do script dựng nằm gọn trong `04.WEB`.** Thư mục cũ của công ty
+(`01.MANEGER`, `02.INPUT`, `03.OUTPUT`, `260728`…) nằm ngoài và **không bị đụng tới**.
+Hai lớp bảo vệ, không phải một: cây máy sinh tách riêng thư mục, *và* script không
+bao giờ chạm thư mục thiếu dấu `.bim-id` do chính nó tạo.
+
+### Dời thư mục gốc sang chỗ khác
+
+Rẻ. Chuyển cả cây (kèm `.bim-sync.json`) sang chỗ mới, sửa `THU_MUC_GOC` trong
+`.env.dong-bo`, chạy lại là xong — **script không dựng lại gì và không tải lại file
+nào**. Nó nhận ra thư mục cũ bằng dấu `.bim-id` bên trong chứ không bằng đường dẫn.
+
+Đã làm thật ngày 05/09/2026 khi gom cây vào `04.WEB`: sau khi dời, lần chạy kế tiếp
+báo 0 tạo mới · 0 đổi tên · 0 đẩy lên · 0 kéo về, 30 file và 45 dấu `.bim-id` nguyên vẹn.
+
+Chuyển trong cùng một share thì gần như tức thì (Windows chỉ đổi mục lục, không chép
+dữ liệu). Chuyển sang share khác hoặc sang ổ khác thì phải chép thật 588 MB — chờ
+chép **xong hẳn** rồi mới chạy script, chép dở mà chạy thì script thấy thiếu file và
+xếp chúng vào mục "cần bạn quyết".
 
 ---
 

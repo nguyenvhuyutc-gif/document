@@ -19,8 +19,7 @@ quyền deploy, nhưng dùng chung MongoDB nên dữ liệu hai bên giống nha
 | `scripts/kiem-tra-cau-hinh.mjs` | Kiểm `.env` + MongoDB + S3 ở máy — an toàn, chạy lúc nào cũng được |
 | `scripts/don-file-mo-coi.mjs` | Dọn file mồ côi trên S3 — chạy tay, xoá được dữ liệu thật |
 | `scripts/dong-bo-thu-muc.mjs` + `dong-bo/` | Đồng bộ thư mục NAS ↔ bảng — xem § Đồng bộ NAS |
-| `scripts/thu-quyen-tvgs.mjs` | Kiểm phân quyền cột TVGS trên API thật — chạy lại sau mỗi lần đụng `api/data.js` hoặc `api/files.js` |
-| `scripts/thu-quyen-tvgs.mjs` | Kiểm phân quyền THẬT của cột mở tự do — **chạy lại sau mỗi lần đụng `api/data.js` hoặc `api/files.js`** |
+| `scripts/thu-quyen-tvgs.mjs` | Kiểm phân quyền THẬT của cột mở tự do trên API — **chạy lại sau mỗi lần đụng `api/data.js` hoặc `api/files.js`** |
 | `vercel.json` | Rewrite trang gốc + CORS + `functions.maxDuration` |
 | `serve.cjs`, `start-server.bat`, `data.json` | **Tư liệu, KHÔNG chạy được nữa** — xem § Bản LAN |
 
@@ -125,7 +124,7 @@ ba tuần sau mới lộ. Dùng `dong-bo-theo-lich.bat`. Và **chỉ MỘT máy 
 
 Bốn module trong `scripts/dong-bo/`, mỗi cái do một phiên viết theo
 [HOP-DONG.md](scripts/dong-bo/HOP-DONG.md). **Đọc § Bẫy đã biết ở đầu file đó trước
-khi sửa bất cứ gì** — bảy bẫy, mỗi cái đều đã cắn thật một lần.
+khi sửa bất cứ gì** — tám bẫy, mỗi cái đều đã cắn thật một lần.
 
 Ba điều quan trọng nhất:
 
@@ -138,6 +137,46 @@ Ba điều quan trọng nhất:
 Cấu hình ở `scripts/.env.dong-bo` (bị `.gitignore` chặn; mẫu là `.env.dong-bo.example`).
 Đường dẫn phải là **UNC**, không phải ổ map: ổ map thuộc phiên đăng nhập nên Task
 Scheduler chạy tài khoản khác sẽ không thấy.
+
+**`THU_MUC_GOC` trỏ vào một thư mục con riêng, không phải thư mục dự án.** Hiện tại:
+
+```
+…\<thu-muc-du-an>\04.WEB      ← THU_MUC_GOC
+…\<thu-muc-du-an>\01.MANEGER  ┐
+…\<thu-muc-du-an>\02.INPUT    ├ cây cũ của công ty, script không đụng
+…\<thu-muc-du-an>\03.OUTPUT   ┘
+```
+
+Cây do script tạo gom hết vào `04.WEB` nên nhìn thư mục dự án là biết ngay phần nào
+do người sắp, phần nào do máy sinh.
+
+**Dời cả cây sang chỗ khác không làm hỏng gì** — script nhận diện bằng `.bim-id` chứ
+không bằng đường dẫn (thiết kế của `docCayHienCo`). Đã kiểm bằng cách chuyển thật
+rồi chạy lại: 0/0/0/0, 30 file và 45 dấu `.bim-id` nguyên vẹn. Dời xong chỉ cần sửa
+`THU_MUC_GOC`.
+
+Nhưng **chỉ tức thì khi dời trong CÙNG share**. Sang share khác hoặc ổ khác là chép
+thật 588 MB — **chờ chép xong hẳn rồi mới chạy script**, chép dở mà chạy thì script
+thấy thiếu file và xếp chúng vào mục "cần bạn quyết".
+
+### Tên thư mục Quyển — dấu gạch và dấu phẩy KHÁC nghĩa
+
+Tên thư mục bỏ tiền tố định danh cầu (`SD-CTP`, `CTP/T`, `SHP/SHT`) vì thư mục Tập
+đã nói cầu nào rồi; giữ lại **dải trụ** — thứ người đi tìm bản vẽ thực sự cần.
+
+| Nguồn trên web | Thư mục | |
+|---|---|---|
+| `TỪ SD-CTP-T51 ĐẾN SD-CTP-T55` | `I.1-4 CKN T51-T55` | **gạch** = dải liên tục |
+| `CÁC TRỤ SD-CTP-T47, SD-CTT-T50` | `I.2-2 KCPD T47,T50` | **phẩy** = chỉ hai trụ đó |
+| `TRỤ SHP/T-T43 ĐẾN MỐ SHP/SHT - M2` | `I.2-1 T43-M2` | mố cũng là mốc hợp lệ |
+
+Đặt `T47-T50` cho quyển chỉ có T47 và T50 là **nói dối người dùng**: người tìm bản
+vẽ trụ T49 sẽ mở đúng thư mục đó rồi không thấy gì. `daiTruMo()` trong
+`cay-thu-muc.mjs` phân biệt bằng chữ "ĐẾN" trong nguồn.
+
+Hai bẫy ở đó: dò từ khoá tiếng Việt **phải bỏ dấu trước** (`\bĐẾN\b` không bao giờ
+khớp vì `Đ` ngoài ASCII — im lặng, không báo lỗi); và ranh giới từ `\b[TM]\d+\b` là
+thứ giữ cho `KM29+877` không bị đọc thành trụ `M29`.
 
 Đo được trên NAS công ty: `\\?\UNC\` **chạy**, trần đường dẫn **1039 ký tự** (Samba,
 cao hơn Windows nhiều). Nên trần 260 chỉ còn là ràng buộc của Explorer/CAD, không

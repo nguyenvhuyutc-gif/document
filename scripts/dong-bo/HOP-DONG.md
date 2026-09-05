@@ -68,6 +68,21 @@ Chỗ va thật thường là nơi tên KHÔNG mang số thứ tự — cấp Qu
 không vì tên đã có số đứng đầu. Đặt phép kiểm ở đúng chỗ va.
 *(bim-02 tìm ra bằng cách chạy thật; bim-e4 chỉ ra gốc rộng hơn "phép so".)*
 
+### 8. `\b` không nhận ký tự tiếng Việt — dò từ khoá phải bỏ dấu TRƯỚC
+
+`/\bĐẾN\b/` **không bao giờ khớp** chuỗi chứa "ĐẾN". `\b` là ranh giới giữa `\w`
+(chỉ `[A-Za-z0-9_]`) và phần còn lại; `Đ` nằm ngoài ASCII nên không phải `\w`, ranh
+giới không tồn tại ở đó. Không lỗi, không cảnh báo — chỉ lặng lẽ trả `false`.
+
+Cắn ở `cay-thu-muc`: phép dò "ĐẾN" quyết định thư mục tên `T47-T50` (dải liên tục)
+hay `T47,T50` (chỉ hai trụ đó) — sai thì người tìm bản vẽ trụ T49 mở đúng thư mục
+rồi không thấy gì. Module chạy đúng vì dò trên chuỗi đã qua `lamSach`; script đo thì
+dò trên chuỗi còn dấu và in nhãn sai toàn bộ, suýt kết luận nhầm là module hỏng.
+
+Quy tắc: **mọi phép dò từ khoá tiếng Việt chỉ chạy trên chuỗi đã bỏ dấu.** Cùng
+họ với bẫy 7 — cả hai đều là "phép so trông thì đúng, im lặng khi sai".
+*(bim-e4 tìm ra.)*
+
 ## Luật chung
 
 1. **Module chỉ export hàm.** Không chạy gì lúc `import`, không `process.exit()`,

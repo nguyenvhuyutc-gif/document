@@ -1,5 +1,5 @@
 ---
-status: pending
+status: done
 ngay: 2026-09-05
 ---
 
@@ -29,10 +29,10 @@ Làm song song bởi bốn phiên, mỗi phiên sở hữu trọn một file (xe
 | Pha | Module | Ai | Trạng thái |
 |---|---|---|---|
 | [01](phase-01-khung-va-cau-hinh.md) | `nen-tang.mjs` | bim-02 | ✅ 49/49 |
-| [02](phase-02-dung-cay-thu-muc.md) | `cay-thu-muc.mjs` | bim-e4 | 🔧 đang sửa 3 lỗi rà chéo |
+| [02](phase-02-dung-cay-thu-muc.md) | `cay-thu-muc.mjs` | bim-e4 | ✅ 101/101 |
 | [03](phase-03-day-file-len.md) | `day-len.mjs` | bim-03 | ✅ 32/32 |
-| [04](phase-04-keo-ve-va-so-ghi.md) | `keo-ve.mjs` | bim-02 | ✅ 26/26 |
-| — | `dong-bo-thu-muc.mjs` (điều phối) | bim-e5 | ✅ chạy khô sạch |
+| [04](phase-04-keo-ve-va-so-ghi.md) | `keo-ve.mjs` | bim-02 | ✅ 29/29 |
+| — | `dong-bo-thu-muc.mjs` (điều phối) | bim-e5 | ✅ chạy thật xong |
 | — | `docs/cam-lich-dong-bo.md` + `.bat` | bim-02 | ✅ |
 
 ## Đo được trên NAS thật
@@ -101,10 +101,22 @@ khác nhau và cả hai đều cần thiết.
 - `EDIT_KEY` của môi trường production
 - Cột `filesTvgs` — nếu phiên kia thêm xong thì pha 02 tạo luôn thư mục con cho nó
 
-## Nghiệm thu chung
+## Nghiệm thu chung — đã đạt trên NAS thật 05/09/2026
 
-- Chạy khô in ra đúng việc sẽ làm, không đụng NAS lẫn web
-- Thả một bản vẽ mới vào thư mục → chạy → file lên đúng dòng, đúng cột
-- Chạy lại lần hai → không tải lên lại gì
-- Xoá file trên web → chạy lại → **không** sống lại từ thư mục
-- Thư mục cũ trên NAS không bị đổi tên, xoá, hay thêm bớt gì
+- ✅ Chạy khô in ra đúng việc sẽ làm, không đụng NAS lẫn web
+- ✅ Thả một bản vẽ mới vào thư mục → chạy → file lên đúng dòng, đúng cột
+- ✅ Chạy lại lần hai → không tải lên lại gì (0/0/0/0)
+- ✅ Xoá file trên web → chạy lại → **không** sống lại từ thư mục
+- ✅ Thư mục cũ trên NAS không bị đổi tên, xoá, hay thêm bớt gì
+
+Kết quả cuối: **195 thư mục · 30 file · 588,5 MB · 45 dấu `.bim-id`**, cây gọn trong
+`04.WEB`. 274 phép kiểm đạt, 0 hỏng.
+
+Hai việc script **cố ý không tự xử**, chờ người quyết trên web:
+
+- `QUYỂN II.1-1 CỌC KHOAN NHỒI TRỤ T56-TP ĐẾN T67-TP.pdf` và
+  `03. KCPT dam SPT_T69-T79.pdf` — mỗi cái có **hai bản trùng tên trong cùng một ô**.
+  Thư mục chỉ giữ được một, bản thứ hai không kéo về được. Đổi tên hoặc bỏ bớt một
+  bản trên web là hết báo.
+- Hai dòng WBS `1.1.1.3` và dòng kề nhau rút gọn ra cùng tên `I.1-2 CKN T49`, nên một
+  cái mang hậu tố `(2)`. Không hỏng gì, chỉ dễ mở nhầm.

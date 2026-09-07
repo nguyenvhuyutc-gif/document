@@ -147,6 +147,9 @@ Scheduler chạy tài khoản khác sẽ không thấy.
 …\<thu-muc-du-an>\03.OUTPUT   ┘
 ```
 
+Đường dẫn thật nằm ở `scripts/.env.dong-bo` — file đó bị `.gitignore` chặn, cố ý:
+repo này công khai nên tên máy chủ và thư mục nội bộ không đi vào git.
+
 Cây do script tạo gom hết vào `04.WEB` nên nhìn thư mục dự án là biết ngay phần nào
 do người sắp, phần nào do máy sinh.
 

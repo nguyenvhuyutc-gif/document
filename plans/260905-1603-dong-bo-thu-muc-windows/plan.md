@@ -37,18 +37,35 @@ Làm song song bởi bốn phiên, mỗi phiên sở hữu trọn một file (xe
 
 ## Đo được trên NAS thật
 
-`\\<ten-nas>\projects\<share>\2026\<thu-muc-du-an>` (69 ký tự)
+`\\<ten-nas>\<share>\...\<thu-muc-du-an>\04.WEB` — đường dẫn thật dài **76 ký tự**
+(chỗ giữ chỗ, thay bằng đường dẫn của đơn vị bạn; đường dẫn thật đặt trong
+`scripts/.env.dong-bo`, file đó bị `.gitignore` chặn)
 
 | | |
 |---|---|
 | `\\?\UNC\` trên NAS | **chạy** — hướng Node đứng vững |
 | Đường dẫn sâu nhất ghi + đọc được | **1039 ký tự** (NAS chạy Samba, trần cao hơn Windows) |
 | Tên một thành phần | 255 ký tự |
-| Cây sẽ tạo | 45 thư mục dòng + 145 thư mục cột |
-| Đường dẫn dài nhất + tên file 80 | **217** — 0 ô vượt 260, không cần bật LongPaths |
+| Cây đã tạo | 195 thư mục — 45 thư mục dòng + 150 thư mục cột |
+| Đường dẫn dài nhất đang có | 216 ký tự |
+| **Xấu nhất có thể** | **235** = thư mục sâu nhất 154 + tên file dài nhất 80 — dư **25** |
 
 Trần 260 **không còn là ràng buộc của việc ghi** — chỉ còn là ràng buộc của Explorer
 và CAD trên máy trạm.
+
+Nhưng khoảng dư đang mỏng đi, và **con số phải canh là 25 chứ không phải 44**.
+
+Đường dẫn dài nhất *đang có* là 216 — nhưng file dài nhất và thư mục sâu nhất là hai
+chỗ khác nhau. Ngày ai đó thả bản vẽ tên 80 ký tự vào thư mục sâu 154 ký tự thì thành
+**235**. Đó mới là số để canh, và nó chỉ còn cách trần 260 đúng 25 ký tự.
+
+Riêng việc đổi tên cột sang dạng đọc được (`PDF` → `1 Dang trinh PDF`) đã ăn 10. Đặt
+tên cột dài thêm, thêm một cấp vào cây, hay dời thư mục gốc xuống sâu hơn — cả ba đều
+ăn vào 25 ký tự đó, nên **đo lại trước khi làm**.
+
+Vượt 260 thì script **vẫn ghi và vẫn đồng bộ đúng** — Node đi đường `\\?\UNC\`. Hỏng
+là hỏng ở Explorer và AutoCAD trên máy chưa bật LongPaths: không mở nổi file. Nghĩa là
+**log sẽ không báo gì**, vì với script mọi thứ vẫn xanh.
 
 ## Tám bẫy đã tìm ra và bịt
 

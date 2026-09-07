@@ -25,12 +25,20 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 // Năm cột file, đúng thứ tự FKEYS trong bang-hang-muc.html.
+//
+// Tên thư mục lấy theo nhãn cột trên web, bỏ chữ "File" và bỏ dấu tiếng Việt, kèm
+// số thứ tự để Explorer xếp đúng trình tự như trên bảng.
+//
+// `tenCu` là các tên đã dùng ở những lần chạy trước. Thư mục cột KHÔNG mang `.bim-id`
+// nên không tra ngược được như thư mục dòng — chỉ nhận ra nhau bằng tên. Bỏ danh sách
+// này đi thì lần đổi tên sau sẽ tạo thư mục mới rỗng và bỏ lại thư mục cũ CÙNG toàn bộ
+// file đã kéo về trong đó. Thêm tên mới vào đầu `thuMuc`, đẩy tên cũ vào `tenCu`.
 export const COT = [
-  { key: "files",          thuMuc: "PDF" },
-  { key: "filesCad",       thuMuc: "DWG-Excel" },
-  { key: "filesTvgs",      thuMuc: "TVGS" },
-  { key: "filesDuyet",     thuMuc: "Da duyet" },
-  { key: "filesChapThuan", thuMuc: "Chap thuan" },
+  { key: "files",          thuMuc: "1 Dang trinh PDF",         tenCu: ["PDF"] },
+  { key: "filesCad",       thuMuc: "2 Dang trinh DWG + Excel", tenCu: ["DWG-Excel"] },
+  { key: "filesTvgs",      thuMuc: "3 Y kien TVGS",            tenCu: ["TVGS"] },
+  { key: "filesDuyet",     thuMuc: "4 Da duyet",               tenCu: ["Da duyet"] },
+  { key: "filesChapThuan", thuMuc: "5 Ho so chap thuan",       tenCu: ["Chap thuan"] },
 ];
 
 // Tên ngắn cho cấp Tập. KHÔNG suy ra được từ tên gốc bằng bất kỳ quy tắc máy nào
@@ -317,6 +325,11 @@ async function taoThuMuc(nenTang, duongDan, chayKho) {
   await fs.mkdir(nenTang.duongDai(duongDan), { recursive: true });
 }
 
+async function coThuMucTren(nenTang, duongDan) {
+  try { return (await fs.stat(nenTang.duongDai(duongDan))).isDirectory(); }
+  catch { return false; }
+}
+
 export async function dungCay(thuMucGoc, rows, nenTang, { chayKho = true, bangTraTap } = {}) {
   if (!Array.isArray(rows)) throw new Error("dungCay: cần mảng dòng của bảng");
   if (!thuMucGoc) throw new Error("dungCay: thiếu đường dẫn thư mục gốc");
@@ -412,7 +425,43 @@ export async function dungCay(thuMucGoc, rows, nenTang, { chayKho = true, bangTr
   async function dungCot(rowId, goc) {
     const cot = {};
     for (const c of COT) {
-      const p = path.join(goc, c.thuMuc);
+      const moi = path.join(goc, c.thuMuc);
+      let p = moi;
+
+      // Đổi tên thư mục cột khi quy tắc đặt tên thay đổi. Thư mục cột không mang
+      // `.bim-id` nên chỉ nhận ra nhau bằng tên — dò trong `tenCu`. Không làm bước
+      // này thì thư mục mới mọc lên rỗng còn file đã kéo về nằm lại trong thư mục
+      // cũ và không bao giờ được đồng bộ nữa.
+      const daCoMoi = await coThuMucTren(nenTang, moi);
+      for (const t of (c.tenCu || [])) {
+        const cu = path.join(goc, t);
+        if (cu === moi || !(await coThuMucTren(nenTang, cu))) continue;
+        if (daCoMoi) {
+          // Cả hai cùng tồn tại: gộp tự động là có thể ghi đè file trùng tên. Để người quyết.
+          canhBao.push({
+            duongDan: cu,
+            ly_do: "có CẢ thư mục tên cũ \"" + t + "\" lẫn tên mới \"" + c.thuMuc
+              + "\" — script không tự gộp vì có thể ghi đè file trùng tên. Chuyển tay rồi xoá thư mục cũ.",
+          });
+          break;
+        }
+        if (chayKho) {
+          doiTen.push({ rowId, cu, moi });
+          // Chạy khô KHÔNG đổi tên thật, nên phải trả đường dẫn ĐANG CÓ. Trả đường dẫn
+          // tương lai thì bước quét file thấy thư mục rỗng và kết luận "file đã bị xoá
+          // khỏi thư mục" — chạy khô nói dối đúng vào chuyện người ta sợ nhất.
+          p = cu;
+        } else {
+          try {
+            await fs.rename(nenTang.duongDai(cu), nenTang.duongDai(moi));
+            doiTen.push({ rowId, cu, moi });
+          } catch (e) {
+            loi.push({ duongDan: cu, ly_do: "không đổi tên được thư mục cột: " + (e && e.message) });
+            p = cu;   // giữ đường dẫn cũ để file trong đó vẫn được thấy
+          }
+        }
+        break;
+      }
       cot[c.key] = p;
       // Báo TRƯỚC khi dựng. Vượt ngưỡng KHÔNG chặn việc ghi (NAS chịu 1039 ký tự
       // với \\?\UNC\), chỉ nghĩa là thư mục này phải mở bằng máy đã bật LongPaths.

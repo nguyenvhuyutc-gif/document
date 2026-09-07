@@ -24,9 +24,13 @@ Chạy tay thì bấm đúp `dong-bo.bat`. Tài liệu này nói về việc đ�
 4. `THU_MUC_GOC` phải là **UNC**, không phải ổ map:
 
    ```
-   ✔ THU_MUC_GOC=\\<ten-nas>\projects\<share>\2026\<thu-muc-du-an>\04.WEB
+   ✔ THU_MUC_GOC=\\<ten-nas>\<share>\...\<thu-muc-du-an>\04.WEB
    ✘ THU_MUC_GOC=Z:\<thu-muc-du-an>\04.WEB
    ```
+
+   `<ten-nas>` và `<share>` là **chỗ giữ chỗ — thay bằng đường dẫn thật của đơn vị
+   bạn**, đừng gõ y nguyên. Không biết đường dẫn UNC thật thì mở Command Prompt gõ
+   `net use` và đọc cột *Remote*.
 
    Ổ map chỉ tồn tại trong phiên đăng nhập của người đã map nó. Task Scheduler
    chạy dưới một phiên khác và sẽ **không thấy ổ Z:** — tác vụ báo lỗi "không tìm
@@ -78,13 +82,27 @@ Mở **Task Scheduler** → *Create Task* (không phải *Create Basic Task*).
 
 | | |
 |---|---|
-| Thư mục gốc | `\\<ten-nas>\projects\<share>\2026\<thu-muc-du-an>\04.WEB` (76 ký tự) |
+| Thư mục gốc | `\\<ten-nas>\<share>\...\<thu-muc-du-an>\04.WEB` — đường dẫn thật dài 76 ký tự |
 | Cây dựng ra | **195 thư mục** — 45 thư mục dòng + thư mục cột của các dòng có file |
 | File kéo về lần đầu | 30 file, 588,5 MB |
-| Đường dẫn dài nhất thật | 206 ký tự — vẫn dưới trần 260 của Explorer |
+| Đường dẫn dài nhất thật | 216 ký tự (đo trên đĩa, kể cả tên file) — **còn cách trần 260 đúng 44 ký tự** |
 
 Lần chạy đầu là lần lâu nhất. Từ lần thứ hai trở đi chỉ đụng phần thay đổi, thường
 xong trong vài chục giây.
+
+**44 ký tự dự phòng là con số cần theo dõi.** Trước lần đổi tên thư mục cột
+(07/09/2026) là 54 — riêng việc đổi `PDF` thành `1 Dang trinh PDF` đã ăn mất 10. Tên
+bản vẽ dài nhất hiện có là 88 ký tự, và tên bản vẽ thì do người đặt, không ai chặn.
+
+Ba việc dưới đây đều ăn vào 44 ký tự đó, nên **đo lại trước khi làm**:
+
+- đặt tên thư mục cột dài thêm
+- thêm một cấp vào cây thư mục
+- dời thư mục gốc xuống chỗ sâu hơn
+
+Vượt 260 thì **script vẫn ghi và vẫn đồng bộ đúng** (NAS chịu tới 1039 ký tự), nhưng
+Explorer và AutoCAD trên máy chưa bật LongPathsEnabled sẽ không mở nổi file. Nói cách
+khác: hỏng ở phía người dùng chứ không hỏng ở phía script, nên log sẽ **không** báo gì.
 
 **Cây do script dựng nằm gọn trong `04.WEB`.** Thư mục cũ của công ty
 (`01.MANEGER`, `02.INPUT`, `03.OUTPUT`, `260728`…) nằm ngoài và **không bị đụng tới**.

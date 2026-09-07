@@ -274,6 +274,35 @@ bị khoá theo — muốn chặn triệt để phải đổi mật khẩu Mongo
 - `.vercelignore` chặn `*.md`, `docs`, `plans`, `scripts`, `scratch` — **đừng gỡ**.
   Vercel phục vụ mọi file tĩnh, nên bỏ ra là `https://…/CLAUDE.md` mở được công khai.
 
+### Repo GitHub đang CÔNG KHAI — quét gì trước khi push
+
+`nguyenvhuyutc-gif/document` public. Tên máy chủ nội bộ, đường dẫn UNC, tên share
+**không được vào git** — chỗ của chúng là `scripts/.env.dong-bo`, file bị `.gitignore`
+chặn. Tài liệu dùng chỗ giữ chỗ `\\<ten-nas>\<share>\...`.
+
+Quét cây làm việc là **chưa đủ**, và đã suýt hỏng vì đúng chuyện đó (07/09/2026):
+
+```bash
+git grep -n "chuỗi"                     # ✘ chỉ file HIỆN TẠI
+for c in $(git rev-list origin/main..HEAD); do
+  git grep -l "chuỗi" $c -- .           # ✔ mọi bản từng commit
+  git log -1 --format=%B $c | grep "chuỗi"   # ✔ THÔNG ĐIỆP commit
+done
+```
+
+Ba điều dễ sai, mỗi cái đã cắn một lần:
+
+- **Sửa ở commit mới không gỡ chuỗi khỏi commit cũ.** Push một nhánh là đẩy cả lịch
+  sử — `github.com/…/blob/<sha-cũ>/…` vẫn đọc được bản cũ.
+- **`git log -S` trả lời sai câu hỏi.** Nó cho biết chuỗi *được đưa vào ở đâu*, không
+  cho biết nó *còn đọc được ở đâu*.
+- **Thông điệp commit cũng là nội dung công khai**, mà nó không nằm trong file nào nên
+  mọi cách quét theo file đều mù với nó — lại hiện ngay trang đầu lịch sử.
+
+Nhánh chưa ai fetch thì `git filter-branch -f --tree-filter … --msg-filter … origin/main..HEAD`
+dọn được sạch. Sau đó **kiểm từ nguồn công khai** (`raw.githubusercontent.com` + GitHub
+API), đừng tin bản local. Và đừng push nhánh sao lưu.
+
 ## Đồng bộ dữ liệu bảng
 
 `POST /api/data?plan=<id>&ifMtime=<mtime>` chỉ ghi khi document trên máy chủ vẫn

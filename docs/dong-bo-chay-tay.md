@@ -42,10 +42,57 @@ Muốn ghi thật bằng dòng lệnh thay vì bấm đúp: `dong-bo.bat --thuc-
 ô trên web: thư mục chỉ giữ được một bản nên bản kia không tải về được. Vào web đổi
 tên hoặc bỏ bớt một bản.
 
+Riêng **một** tình huống trong đó script hỏi được và tự xử: file cùng tên nhưng
+**khác nội dung** giữa thư mục và web — xem mục dưới.
+
 **2. Lỗi** — việc đã thử nhưng không làm được. Câu mô tả nói rõ file nào, lý do gì.
 
 **3. Cảnh báo** — đã làm xong nhưng có chỗ đáng biết. Ví dụ hai hạng mục rút gọn ra
 cùng một tên nên một cái mang hậu tố `(2)`.
+
+## File sửa trên NAS, muốn đẩy đè lên web
+
+Khi một file cùng tên nhưng **khác nội dung** ở hai bên, script báo:
+
+```
+· Bang theo doi y kien TVGS.xlsx  —  trong thư mục 25235841 byte,
+  trên web 23471720 byte — hai bản đã khác nhau
+```
+
+Nó **không tự quyết** bản nào mới hơn — kích thước khác nhau không nói được ai
+đúng. Nhưng nếu bạn bật tính năng dưới đây thì lúc **ghi thật** nó sẽ hỏi từng file:
+
+```
+  Bang theo doi y kien TVGS.xlsx
+     thư mục 25235841 byte  ·  web 23471720 byte
+     dòng: QUYỂN II.1-2: CỌC KHOAN NHỒI TỪ TRỤ T68…
+     Đẩy bản trong thư mục lên web? (y = đẩy, Enter = giữ nguyên):
+```
+
+Gõ `y` thì bản trong thư mục lên web, **bản cũ chuyển vào thùng rác** — giữ 30
+ngày, khôi phục được, file trên kho lưu trữ không bị xoá. Enter suông là giữ nguyên.
+
+### Bật lên
+
+Mở `scripts\.env.dong-bo`, thêm một dòng:
+
+```
+ADMIN_KEY=<mật khẩu quản trị>
+```
+
+Để trống hoặc không có dòng đó thì tính năng tắt, script chỉ báo ra như trước —
+**không hỏng gì khác**.
+
+### Ba điều nên biết trước khi bật
+
+- **Chỉ hỏi khi có người ngồi trước máy.** Chạy theo lịch (Task Scheduler) không
+  có bàn phím nên script không hỏi và không thay gì — nó ghi một dòng cảnh báo.
+- **Mặc định luôn là KHÔNG.** Enter suông, Ctrl+C, hay gõ nhầm ký tự đều ra "giữ
+  nguyên". Người vội bấm Enter cho xong thì không mất gì.
+- **`ADMIN_KEY` là mật khẩu mạnh nhất của hệ thống** — ai đọc được file cấu hình
+  là mở được cả thùng rác. Chỉ điền trên máy của bạn, đừng điền trên máy dùng chung.
+  Script chỉ dùng nó cho đúng một việc là chuyển bản cũ vào thùng rác, và **không
+  bao giờ xoá vĩnh viễn**.
 
 ## Khi có sự cố
 

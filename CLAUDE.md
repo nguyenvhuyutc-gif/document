@@ -122,7 +122,7 @@ phím không ai bấm; Windows thấy "đang chạy" nên bỏ qua mọi lần s
 ba tuần sau mới lộ. Dùng `dong-bo-theo-lich.bat`. Và **chỉ MỘT máy được cắm lịch**
 — khoá `.bim-sync.lock` là lưới an toàn, không phải giấy phép.
 
-Bốn module trong `scripts/dong-bo/`, mỗi cái do một phiên viết theo
+Năm module trong `scripts/dong-bo/`, mỗi cái do một phiên viết theo
 [HOP-DONG.md](scripts/dong-bo/HOP-DONG.md). **Đọc § Bẫy đã biết ở đầu file đó trước
 khi sửa bất cứ gì** — tám bẫy, mỗi cái đều đã cắn thật một lần.
 
@@ -132,7 +132,32 @@ Ba điều quan trọng nhất:
   đồng bộ" với "đã bị xoá"; không có nó thì file xoá trên web sẽ sống lại từ thư mục
   ở mỗi lần chạy.
 - **Chỉ đụng thư mục có `.bim-id`.** Cây thư mục cũ của công ty không bị chạm tới.
-- **Chỉ cần `EDIT_KEY`**, không có `ADMIN_KEY` — script không xoá gì.
+- **`EDIT_KEY` là đủ.** `ADMIN_KEY` **tuỳ chọn**, mở đúng một việc — xem ngay dưới.
+
+### Thay bản khác nội dung — chỗ duy nhất đụng tới bản trên web
+
+Một file cùng tên nhưng khác kích thước ở hai bên: script không đoán bản nào mới.
+Nếu `.env.dong-bo` có `ADMIN_KEY` **và** có người ngồi trước máy, lúc ghi thật nó
+hỏi từng file; đồng ý thì bản trong thư mục lên web và **bản cũ vào thùng rác**
+(30 ngày, khôi phục được, object S3 không đụng). Thiếu khoá hoặc chạy theo lịch →
+tính năng tự tắt, mục vẫn nằm ở "CẦN BẠN QUYẾT" như trước.
+
+Toàn bộ nằm trong `scripts/dong-bo/thay-ban-moi.mjs`. Bốn chốt giữ phạm vi:
+
+1. Chỉ xử mục mang dấu `loai: "lech"` do `keo-ve.mjs` đóng. Mọi tình huống khác
+   trong bảng quyết định vẫn chỉ được báo ra.
+2. **Chỉ hai file được đọc `cauHinh.ADMIN_KEY`** — `nen-tang.mjs` (đọc env) và
+   `thay-ban-moi.mjs` (dùng). `node scratch/thu-nen-tang.mjs` canh đúng chuyện này.
+3. Chỉ gọi `?action=trash`. Không bao giờ xoá vĩnh viễn.
+4. Mặc định là KHÔNG: Enter suông, Ctrl+C, ký tự lạ đều ra "giữ nguyên".
+
+**Thứ tự ba bước không đảo được:** đẩy lên → ghi bảng → bỏ bản cũ vào rác. Đảo hai
+bước cuối thì có khoảnh khắc bảng trỏ vào file đã `trashed` — người dùng thấy file
+mà bấm vào không tải được. Giao diện web cũng theo đúng thứ tự này.
+
+Và phải **giữ `note` cùng `pairUid` của mục cũ** khi thay: ghi chú đi theo ô chứ
+không theo file, `pairUid` thiếu là file rơi khỏi dòng. `node scratch/thu-thay-ban-moi.mjs`
+canh cả hai.
 
 Cấu hình ở `scripts/.env.dong-bo` (bị `.gitignore` chặn; mẫu là `.env.dong-bo.example`).
 Đường dẫn phải là **UNC**, không phải ổ map: ổ map thuộc phiên đăng nhập nên Task

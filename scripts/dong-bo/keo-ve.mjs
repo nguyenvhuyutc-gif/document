@@ -80,9 +80,15 @@ export function quyetDinh(soGhi, dsDia, mangBang, rowId, cot) {
 
     // Còn lại: hai bên cùng có. Không làm gì — trừ khi nội dung đã lệch nhau.
     // size lưu trong sổ (ngoài khoá) chính là để bắt được chuyện này.
+    //
+    // `loai: "lech"` là dấu cho tầng điều phối biết đây là tình huống DUY NHẤT nó
+    // hỏi được người dùng và tự xử (§ Thay bản khác nội dung). Mọi mục canQuyet
+    // khác không mang dấu này và vẫn chỉ được báo ra, không tự xử.
+    // Kèm `banWeb` — nguyên mục trên bảng, vì muốn bỏ nó vào thùng rác thì phải có
+    // đủ uid/note/pairUid/uploadedAt; thiếu một trường là khôi phục xong file nằm rời.
     if (d && b && Number(d.size) !== Number(b.size)) {
       them(d.ten, `trong thư mục ${d.size} byte, trên web ${b.size} byte — hai bản đã khác nhau`,
-        { size: d.size || 0, duongDan: d.duongDan, id: b.id });
+        { size: d.size || 0, duongDan: d.duongDan, id: b.id, loai: "lech", banWeb: b, sizeWeb: b.size || 0 });
     }
   }
   return kq;

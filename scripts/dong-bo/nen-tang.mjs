@@ -39,9 +39,17 @@ export function docCauHinh(thuMucScript) {
   if (thieu.length) throw new Error("thiếu biến trong " + tep + ": " + thieu.join(", "));
   if (!/^https?:\/\//i.test(env.BASE_URL)) throw new Error("BASE_URL phải bắt đầu bằng http:// hoặc https://");
 
-  // Chỉ chép đúng bốn biến cần. ADMIN_KEY dù có trong file cũng không đi tiếp.
+  // Bốn biến trên là bắt buộc. ADMIN_KEY **tuỳ chọn** và chỉ mở đúng một việc:
+  // bỏ bản cũ vào thùng rác sau khi đã đẩy bản mới lên, ở § Thay bản khác nội dung.
+  // Thiếu nó thì tính năng ấy tự tắt và script báo ra — KHÔNG hỏng gì khác.
+  //
+  // Trước 09/2026 biến này bị chặn thẳng tại đây vì máy trạm không nên cầm quyền
+  // xoá. Nay mở là một đánh đổi có ý thức, nên giữ phạm vi hẹp nhất có thể: không
+  // hàm nào khác trong bộ này được đọc `ADMIN_KEY`, và nó không bao giờ dùng cho
+  // xoá vĩnh viễn — chỉ `?action=trash`, thứ giữ 30 ngày và khôi phục được.
   return {
     EDIT_KEY: env.EDIT_KEY,
+    ADMIN_KEY: env.ADMIN_KEY || "",
     BASE_URL: env.BASE_URL.replace(/\/+$/, ""),
     THU_MUC_GOC: env.THU_MUC_GOC,
     PLAN_ID: env.PLAN_ID,

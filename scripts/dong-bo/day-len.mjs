@@ -248,7 +248,7 @@ const KIEU = {
   jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", zip: "application/zip",
   rar: "application/vnd.rar", txt: "text/plain", rvt: "application/octet-stream",
 };
-function kieuTheoDuoi(ten) {
+export function kieuTheoDuoi(ten) {
   const m = /\.([A-Za-z0-9]+)$/.exec(String(ten || ""));
   return (m && KIEU[m[1].toLowerCase()]) || "application/octet-stream";
 }

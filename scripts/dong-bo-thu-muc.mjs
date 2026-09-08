@@ -19,6 +19,7 @@ import * as nenTang from "./dong-bo/nen-tang.mjs";
 import * as cayThuMuc from "./dong-bo/cay-thu-muc.mjs";
 import * as dayLen from "./dong-bo/day-len.mjs";
 import * as keoVe from "./dong-bo/keo-ve.mjs";
+import * as thayBan from "./dong-bo/thay-ban-moi.mjs";
 
 const THU_MUC_SCRIPT = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -140,8 +141,52 @@ async function dongBoFile(cauHinh, rows, cay, mtimeBanDau) {
     for (const m of dsKeoVe) await keoMot(cauHinh, m, row, soGhi);
   }
 
+  if (!chayKho) mtime = await hoiThayBanLech(cauHinh, rows, soGhi, mtime);
+
   for (const k of boKhoiSoTong) delete soGhi.files[k];
   if (!chayKho) await nenTang.ghiSoGhi(cauHinh.THU_MUC_GOC, soGhi, { chayKho });
+}
+
+// Hỏi từng file lệch nội dung, thay bản trên web bằng bản trong thư mục.
+// CHỈ chạy khi ghi thật, và chỉ với mục mang dấu loai:"lech" — mọi mục "cần bạn
+// quyết" khác vẫn chỉ được báo ra. Người trả lời Enter suông là bỏ qua.
+async function hoiThayBanLech(cauHinh, rows, soGhi, mtimeBanDau) {
+  let mtime = mtimeBanDau;
+  const lech = thayBan.locMucLech(canQuyet);
+  if (!lech.length) return mtime;
+
+  const { duoc, vi } = thayBan.hoiDuocKhong(cauHinh);
+  if (!duoc) {
+    nhomCanhBao.push(lech.length + " file có bản trong thư mục khác bản trên web. "
+      + "Script không hỏi được để thay (" + vi + ") nên để nguyên — xem mục CẦN BẠN QUYẾT.");
+    return mtime;
+  }
+
+  log("\n── Có " + lech.length + " file khác nội dung giữa thư mục và web ──");
+  log("  Trả lời cho từng file. Enter suông = giữ nguyên, không thay.");
+  log("  Đồng ý thì bản trong thư mục lên web, bản cũ vào thùng rác (giữ 30 ngày).\n");
+
+  for (const m of lech) {
+    log("  " + m.ten);
+    log("     thư mục " + m.size + " byte  ·  web " + m.sizeWeb + " byte");
+    const dong = rows.find((r) => r && String(r.id) === String(m.rowId));
+    if (dong) log("     dòng: " + nhan(dong));
+
+    const co = await thayBan.hoiMotCau("     Đẩy bản trong thư mục lên web? (y = đẩy, Enter = giữ nguyên): ");
+    if (!co) { log("     → giữ nguyên\n"); continue; }
+
+    const kq = await thayBan.thayMotBan(cauHinh, m, { rows, mtime, nenTang, dayLen });
+    if (!kq.ok) { nhomLoi.push({ ten: m.ten, ly_do: kq.loi }); log("     → KHÔNG THAY ĐƯỢC: " + kq.loi + "\n"); continue; }
+
+    mtime = kq.mtime;
+    ghiSo(soGhi, m.rowId, m.cot, m.ten, m.size);       // sổ phải mang size mới
+    m.daThay = true;                                    // gỡ khỏi mục "cần bạn quyết" ở báo cáo
+    if (kq.canhBao) nhomCanhBao.push(m.ten + " — " + kq.canhBao);
+    log("     → đã thay" + (kq.canhBao ? " (kèm cảnh báo)" : "") + "\n");
+  }
+
+  for (let k = canQuyet.length - 1; k >= 0; k--) if (canQuyet[k].daThay) canQuyet.splice(k, 1);
+  return mtime;
 }
 
 async function dayMotDong(cauHinh, rows, row, dsCanDay, soGhi, mtime) {

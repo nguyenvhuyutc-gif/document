@@ -48,9 +48,60 @@ function isProtected() {
   return !!(process.env.ADMIN_KEY || process.env.EDIT_KEY);
 }
 
+// `nasPath` là chỗ file nằm trong cây thư mục nội bộ. Nút "mở trong Explorer" chỉ
+// dành cho quyền sửa trở lên, nên ĐƯỜNG DẪN cũng phải cắt ở đây chứ không chỉ giấu
+// nút trên giao diện: GET này ai gọi cũng được, và người chỉ xem mở tab Network ra
+// là đọc nguyên sơ đồ thư mục nội bộ của công ty.
+//
+// Cắt trên BẢN SAO. Sửa tại chỗ là hỏng đối tượng vừa đọc từ Mongo, mà driver có
+// thể còn giữ nó trong bộ nhớ đệm giữa các lần gọi trên cùng một container.
+function boNasPathNeuKhongQuyen(data, role) {
+  if (!data || role === "admin" || role === "edit") return data || null;
+  const rows = Array.isArray(data.rows) ? data.rows : null;
+  if (!rows) return data;
+  return {
+    ...data,
+    rows: rows.map((r) => {
+      if (!r || typeof r !== "object") return r;
+      let doi = false;
+      const moi = { ...r };
+      // Duyệt theo DỮ LIỆU chứ không theo danh sách cột: `nasPath` chỉ nằm trong
+      // mục file, nên "mảng có phần tử mang nasPath" đã đủ nhận diện. Chép FKEYS
+      // vào đây là tạo chỗ thứ tư phải giữ khớp, mà quên một cột ở chỗ này thì
+      // đường dẫn cột đó rò ra cho người chỉ xem — im lặng, không ai thấy.
+      for (const k of Object.keys(r)) {
+        if (!Array.isArray(r[k])) continue;
+        if (!r[k].some((f) => f && f.nasPath)) continue;
+        moi[k] = r[k].map((f) => {
+          if (!f || !f.nasPath) return f;
+          const { nasPath, ...conLai } = f;
+          return conLai;
+        });
+        doi = true;
+      }
+      return doi ? moi : r;
+    }),
+  };
+}
+
 // Lọc một mục file do client gửi lên về đúng những trường mình biết. KHÔNG lưu
 // nguyên vật client gửi: người không mật khẩu cũng gọi được endpoint này, nhét
 // trường lạ vào document kế hoạch là mở đường cho đủ thứ về sau.
+// Đường dẫn TƯƠNG ĐỐI của file trong cây đồng bộ NAS, do script đồng bộ ghi vào.
+// Nút "mở trong Explorer" trên web ghép nó với thư mục gốc của từng máy.
+//
+// Client vá cột TVGS gửi lại nguyên văn nên PHẢI lọc: chỉ nhận dạng tương đối,
+// chặn đường dẫn tuyệt đối (ổ đĩa, UNC) và mọi đoạn "..". Không có bước này thì ai
+// cũng nhét được `\\may-la\chia-se\...` vào bảng, và nút kia trở thành đường dẫn
+// người dùng bấm vào mà không nghi ngờ gì.
+function locNasPath(v) {
+  const s = String(v || "").replace(/\//g, "\\").trim();
+  if (!s) return "";
+  if (/^[A-Za-z]:/.test(s) || s.startsWith("\\\\")) return "";
+  if (s.split("\\").some((p) => p === "..")) return "";
+  return s.slice(0, 400);
+}
+
 function locFileTvgs(f) {
   if (!f || typeof f !== "object") return null;
   const id = String(f.id || "");
@@ -65,6 +116,7 @@ function locFileTvgs(f) {
     uploadedAt: String(f.uploadedAt || "").slice(0, 40),
     note: String(f.note || "").slice(0, 4000),
     pairUid: String(f.pairUid || "").slice(0, 64),
+    nasPath: locNasPath(f.nasPath),
   };
   return ra;
 }
@@ -253,7 +305,10 @@ module.exports = async (req, res) => {
     if (req.method === "GET") {
       const doc = await collection.findOne({ _id: planId });
       if (!doc) return sendJson(res, 200, { ok: true, mtime: 0, data: null, name: null });
-      return sendJson(res, 200, { ok: true, mtime: doc.updatedAt || 0, data: doc.data || null, name: doc.name || null });
+      return sendJson(res, 200, {
+        ok: true, mtime: doc.updatedAt || 0, name: doc.name || null,
+        data: boNasPathNeuKhongQuyen(doc.data, getRole(req)),
+      });
     }
 
     if (req.method === "POST") {

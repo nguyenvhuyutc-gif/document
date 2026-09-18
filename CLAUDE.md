@@ -19,6 +19,7 @@ quyền deploy, nhưng dùng chung MongoDB nên dữ liệu hai bên giống nha
 | `scripts/kiem-tra-cau-hinh.mjs` | Kiểm `.env` + MongoDB + S3 ở máy — an toàn, chạy lúc nào cũng được |
 | `scripts/don-file-mo-coi.mjs` | Dọn file mồ côi trên S3 — chạy tay, xoá được dữ liệu thật |
 | `scripts/dong-bo-thu-muc.mjs` + `dong-bo/` | Đồng bộ thư mục NAS ↔ bảng — xem § Đồng bộ NAS |
+| `dang-ky-mo-file.bat` + `scripts/mo-file-tren-may.ps1` | Nút "mở trong Explorer" — xem [docs/mo-file-tren-may.md](docs/mo-file-tren-may.md) |
 | `scripts/thu-quyen-tvgs.mjs` | Kiểm phân quyền THẬT của cột mở tự do trên API — **chạy lại sau mỗi lần đụng `api/data.js` hoặc `api/files.js`** |
 | `vercel.json` | Rewrite trang gốc + CORS + `functions.maxDuration` |
 | `serve.cjs`, `start-server.bat`, `data.json` | **Tư liệu, KHÔNG chạy được nữa** — xem § Bản LAN |
@@ -85,6 +86,44 @@ lên/xuống **đúng một ô**. Vị trí là `0 … slots.length-1` (ô ứng
 Bản trước 09/2026 là `ganVaoODau()` — chỉ file rời mới có nút, bấm là nhảy thẳng vào
 ô trống đầu tiên, không chọn được ô nào. `node scratch/thu-ghep-cap-file.mjs` canh cả
 hành vi mới lẫn hai biên (ô đầu, khối chưa gán).
+
+**Xếp file vào ô đòi `canEdit()` ở MỌI cột** — kể cả `filesTvgs`. Ngoại lệ mở tự do
+của cột TVGS chỉ nới đúng hai việc: tải ý kiến lên, và bỏ ý kiến vào thùng rác. Xếp
+chỗ là sắp lại hồ sơ của cả dòng nên không nằm trong đó.
+
+### Nút "mở trong Explorer" — `nasPath`
+
+Script đồng bộ ghi vào mỗi mục file một `nasPath`: đường dẫn **tương đối** tính từ
+`THU_MUC_GOC`. Trình duyệt ghép nó với thư mục gốc người dùng khai một lần (lưu ở
+`localStorage`, không gửi lên máy chủ) rồi mở qua giao thức `bim://`.
+
+Tương đối chứ không tuyệt đối vì mỗi máy map ổ mạng một kiểu, **và** vì đường dẫn
+tuyệt đối mang tên máy chủ nội bộ — thứ không nên nằm trong cơ sở dữ liệu dùng chung.
+
+Trình duyệt **chặn mọi liên kết `file://` mở từ trang `https://`** — im lặng, không
+báo lỗi. Đó là lý do phải có giao thức riêng; đừng "sửa" thành `file://`.
+
+Ba chốt, cả ba đều cần:
+
+1. `locNasPath()` trong `api/data.js` lọc thứ client gửi lên khi vá cột TVGS — chặn
+   đường dẫn tuyệt đối (ổ đĩa, UNC) và mọi đoạn `..`.
+2. `boNasPathNeuKhongQuyen()` cắt `nasPath` khỏi GET của người chỉ xem. **Ẩn nút
+   bằng CSS là chưa đủ**: dữ liệu bảng ai GET cũng được, mở tab Network ra là đọc
+   nguyên sơ đồ thư mục nội bộ. Hàm này cắt trên **bản sao** — sửa tại chỗ là hỏng
+   đối tượng driver Mongo còn giữ trong bộ nhớ đệm, và lần sau người *có* quyền cũng
+   mất đường dẫn mà không gì báo.
+3. `scripts/mo-file-tren-may.ps1` là điểm web gọi vào máy: chỉ gọi `explorer.exe`,
+   truyền qua `ArgumentList`, từ chối `..` và ký tự lạ. Không `Invoke-Expression`.
+
+`nasPath` phải **đi cùng file vào thùng rác** như `pairUid` — `hoSoRac()` và whitelist
+trong `api/files.js` đều chép nó. `node scratch/thu-nas-path.mjs` canh hai chốt đầu.
+
+Cài đặt và xử lý sự cố: [docs/mo-file-tren-may.md](docs/mo-file-tren-may.md).
+
+**File `.ps1` phải lưu UTF-8 CÓ BOM.** PowerShell 5.1 đọc file không BOM theo bảng mã
+ANSI, chữ tiếng Việt thành ký tự rác, và chỉ cần một byte rác trùng dấu nháy là cả
+script không chạy với lỗi "string is missing the terminator" — chỉ vào một dòng trông
+hoàn toàn bình thường.
 
 Kéo theo hai điều dễ quên: **ghi chú đi theo dòng** (lưu ở file PDF, không phải ở
 file đi kèm — nên mọi chỗ chuyển một file vào ô đều phải dồn ghi chú của nó sang

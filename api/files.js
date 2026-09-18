@@ -441,6 +441,11 @@ module.exports = async (req, res) => {
                   // pairUid: file DWG này đi kèm file PDF nào. Cùng lý do như trên —
                   // chỉ có trong document kế hoạch, mất là khôi phục xong nằm rời dòng.
                   pairUid: String(it.pairUid || "").slice(0, 64),
+                  // nasPath: chỗ file nằm trong cây thư mục NAS. Cũng chỉ sống trong
+                  // document kế hoạch. Mất thì nút "mở trong Explorer" im lặng tới lần
+                  // đồng bộ kế tiếp — không hỏng dữ liệu, nhưng khôi phục xong người
+                  // dùng thấy file thiếu nút mà không hiểu vì sao.
+                  nasPath: String(it.nasPath || "").slice(0, 400),
                 },
               },
             },
@@ -523,6 +528,7 @@ module.exports = async (req, res) => {
           note: o.note || "",
           viTri: typeof o.viTri === "number" ? o.viTri : 0,
           pairUid: o.pairUid || "",
+          nasPath: o.nasPath || "",
           // File cũ nằm trong MongoDB không có key nên không xin được URL ký —
           // client phải tải nó theo đường khác.
           onS3: !!d.key,

@@ -405,12 +405,12 @@
     content: ""; flex: none; width: 5px; height: 5px; border-radius: 50%;
     background: var(--success); margin-right: 1px;
   }
-  .file-pair-up, .file-pair-down {
+  .file-pair-up, .file-pair-down, .file-mo-nas {
     flex: none; width: 20px; height: 20px; border: none; background: none; cursor: pointer;
     color: var(--text-dim); line-height: 1; border-radius: 5px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
   }
-  .file-pair-up:hover, .file-pair-down:hover { color: var(--accent); background: var(--accent-weak); }
+  .file-pair-up:hover, .file-pair-down:hover, .file-mo-nas:hover { color: var(--accent); background: var(--accent-weak); }
   /* Ô đầu không có chỗ đi lên, khối chưa gán không có chỗ đi xuống. Giữ CHỖ của nút
      thay vì bỏ hẳn — nếu không, chip ở hai đầu danh sách rộng khác chip ở giữa và
      cả cột nhìn răng cưa. */
@@ -792,6 +792,7 @@
   body.is-viewonly #btnNewPlan, body.is-viewonly .plan-card__actions,
   body.is-viewonly .file-add, body.is-viewonly .file-del,
   body.is-viewonly .file-pair-up, body.is-viewonly .file-pair-down,
+  body.is-viewonly .file-mo-nas,
   body.is-viewonly .row-add, body.is-viewonly .col-check input,
   body.is-viewonly #btnView, body.is-viewonly .col-grip, body.is-viewonly .row-grip,
   body.is-viewonly .view-pop,
@@ -802,9 +803,10 @@
      mới thắng được chúng. */
   body.is-viewonly td[data-ck="filesTvgs"] .file-add,
   body.is-viewonly td[data-ck="filesTvgs"] .file-del,
-  body.is-viewonly td[data-ck="filesTvgs"] .file-pair-up,
-  body.is-viewonly td[data-ck="filesTvgs"] .file-pair-down,
   body.no-admin td[data-ck="filesTvgs"] .file-del { display: inline-flex !important; }
+  /* Ngoại lệ TVGS chỉ nới ĐÚNG hai việc: tải ý kiến lên, và bỏ ý kiến vào thùng rác.
+     Nút ↑ ↓ (xếp file vào ô) và nút mở trong Explorer KHÔNG nằm trong đó — chúng
+     sắp lại hồ sơ của cả dòng, và lộ đường dẫn thư mục nội bộ. */
   /* Menu "Hiển thị" chỉ quản trị dùng: ẩn/hiện cột, độ cao dòng, bề rộng cột,
      hiện lại dòng đã ẩn. Người khác luôn thấy bố cục mặc định (cờ `off` trong
      COLUMNS). Ẩn cả tay kéo bề rộng cột và độ cao dòng cho khớp. */
@@ -1691,6 +1693,42 @@
     return { slots: slots, roi: conLai };
   }
 
+  // ---- mở file trong Explorer ----
+  // Bảng chỉ giữ đường dẫn TƯƠNG ĐỐI (script đồng bộ ghi vào). Thư mục gốc là của
+  // riêng từng máy — máy này map ổ Z:, máy kia gõ UNC — nên hỏi một lần rồi nhớ ở
+  // localStorage, không đẩy lên máy chủ.
+  var NAS_GOC_KEY = "bimNasGoc";
+  function nasGoc() {
+    try { return localStorage.getItem(NAS_GOC_KEY) || ""; } catch (e) { return ""; }
+  }
+  function hoiNasGoc() {
+    var v = prompt(
+      "Thư mục gốc của cây đồng bộ trên MÁY NÀY.\n" +
+      "Mở thư mục đó trong Explorer, chép đường dẫn ở thanh địa chỉ rồi dán vào đây.\n\n" +
+      "Ví dụ:  \\\\ten-nas\\du-an\\…\\04.WEB   hoặc   Z:\\…\\04.WEB",
+      nasGoc());
+    if (v === null) return "";
+    v = String(v).trim().replace(/["']/g, "").replace(/[\\/]+$/, "");
+    try { localStorage.setItem(NAS_GOC_KEY, v); } catch (e) {}
+    return v;
+  }
+  // Trình duyệt CHẶN mọi liên kết file:// mở từ trang https — bấm không phản ứng gì,
+  // không báo lỗi. Nên phải đi qua giao thức riêng bim://, đăng ký một lần trên máy
+  // bằng dang-ky-mo-file.reg. Xem docs/mo-file-tren-may.md.
+  function moTrongExplorer(nasPath, doiGoc) {
+    // CSS đã ẩn nút với người chỉ xem, nhưng kiểm lại ở đây: ẩn bằng CSS chỉ là
+    // giao diện, còn đây mới là chỗ tooltip và đường dẫn thư mục nội bộ đi ra.
+    if (!canEdit()) return;
+    var goc = doiGoc ? hoiNasGoc() : (nasGoc() || hoiNasGoc());
+    if (!goc) return;
+    var duong = goc + "\\" + String(nasPath || "").replace(/^[\\/]+/, "").replace(/\//g, "\\");
+    // Không cách nào hỏi trình duyệt xem giao thức đã đăng ký chưa. Bấm mà im lặng
+    // thì gần như chắc là máy chưa chạy file .reg — nói luôn, đừng để người dùng
+    // ngồi đoán xem mình bấm trượt hay phần mềm hỏng.
+    toast("Đang mở trong Explorer… Không thấy gì thì máy chưa đăng ký — chạy dang-ky-mo-file.reg một lần.");
+    location.href = "bim://" + encodeURIComponent(duong);
+  }
+
   // Vị trí của một file trong cột ghép cặp: 0..slots.length-1 là ô ứng với từng file
   // PDF, còn slots.length là khối "chưa gán" ở đáy. Khối ấy tính là MỘT vị trí chung
   // dù đang chứa mấy file — chúng không ứng với PDF nào nên không có thứ tự riêng.
@@ -1706,7 +1744,11 @@
   // khi script đẩy hàng loạt lên, và đổi chỗ là cách bấm vài lần xếp lại được cả cột.
   // Xuống quá ô cuối thì file rời khỏi mọi ô, nằm ở khối "chưa gán".
   function chuyenO(rowId, fkey, fid, huong) {
-    if (!canEditCot(fkey)) return;
+    // canEdit(), KHÔNG phải canEditCot(): xếp file vào ô là sắp lại hồ sơ của cả
+    // dòng, nên đòi mật khẩu ở MỌI cột — kể cả cột Ý kiến TVGS vốn mở tự do cho
+    // việc tải lên và bỏ vào thùng rác. Bên TVGS vẫn gửi ý kiến được như cũ, chỉ
+    // không tự xếp chỗ; người có mật khẩu xếp hộ.
+    if (!canEdit()) return;
     var row = findRow(rowId);
     if (!row) return;
     var f = null;
@@ -1780,6 +1822,16 @@
         b.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="' + n.d + '"/></svg>';
         item.appendChild(b);
       });
+    }
+    // Nút "mở trong Explorer" — chỉ có khi script đồng bộ đã ghi chỗ file nằm trên
+    // NAS. File tải thẳng qua web chưa có, tới lần đồng bộ kế tiếp mới hiện nút.
+    if (f.nasPath && canEdit()) {
+      var mo = document.createElement("button");
+      mo.type = "button"; mo.className = "file-mo-nas";
+      mo.setAttribute("data-nas", f.nasPath);
+      mo.setAttribute("title", "Mở trong Explorer\n" + f.nasPath + "\n\nGiữ Ctrl khi bấm để đổi thư mục gốc trên máy này");
+      mo.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+      item.appendChild(mo);
     }
     var del = document.createElement("button");
     del.type = "button"; del.className = "file-del";
@@ -2164,6 +2216,9 @@
       // `pairUid` cũng chỉ sống trong document kế hoạch như uploadedAt và note:
       // không chép sang đây thì khôi phục xong file DWG nằm rời, mất dòng của nó.
       pairUid: f.pairUid || "",
+      // `nasPath` cùng loại: chỗ file nằm trong cây thư mục NAS, chỉ có trong
+      // document kế hoạch. Mất thì khôi phục xong file thiếu nút "mở trong Explorer".
+      nasPath: f.nasPath || "",
     };
   }
 
@@ -2919,6 +2974,12 @@
         else { finp.setAttribute("data-pair", pr); finp.multiple = false; }
         finp.click();
       }
+      return;
+    }
+    var fmo = e.target.closest(".file-mo-nas");
+    if (fmo) {
+      e.preventDefault();
+      moTrongExplorer(fmo.getAttribute("data-nas"), e.ctrlKey || e.metaKey);
       return;
     }
     var fmv = e.target.closest(".file-pair-up, .file-pair-down");

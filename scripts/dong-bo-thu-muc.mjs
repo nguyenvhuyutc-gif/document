@@ -98,11 +98,36 @@ async function main() {
   }
 }
 
+// Ghi vào metadata file cái đường dẫn TƯƠNG ĐỐI tính từ THU_MUC_GOC, để nút "mở
+// trong Explorer" trên web biết file nằm ở đâu. Tương đối chứ không tuyệt đối vì
+// hai lý do: mỗi máy map NAS một kiểu (ổ Z: hay UNC), và đường dẫn tuyệt đối mang
+// tên máy chủ nội bộ — thứ không nên nằm trong cơ sở dữ liệu dùng chung.
+//
+// Khớp theo tên file, HẠ HOA THƯỜNG: Windows coi "BV-01.PDF" và "bv-01.pdf" là một
+// (bẫy 7 trong HOP-DONG.md), nên so phân biệt hoa thường là bỏ sót đúng những file
+// đã đồng bộ xong.
+function datNasPath(cauHinh, row, cot, dsDia) {
+  let doi = false;
+  const theoTen = new Map();
+  for (const d of dsDia || []) theoTen.set(String(d.ten || "").toLowerCase(), d);
+  for (const f of Array.isArray(row[cot]) ? row[cot] : []) {
+    const d = theoTen.get(String(f.name || "").toLowerCase());
+    if (!d || !d.duongDan) continue;
+    const tuongDoi = path.relative(cauHinh.THU_MUC_GOC, d.duongDan);
+    // relative() trả chuỗi bắt đầu bằng ".." khi file nằm NGOÀI thư mục gốc. Ghi
+    // cái đó vào bảng là cho nút trên web trỏ ra ngoài phạm vi đồng bộ — bỏ qua.
+    if (!tuongDoi || tuongDoi.startsWith("..")) continue;
+    if (f.nasPath !== tuongDoi) { f.nasPath = tuongDoi; doi = true; }
+  }
+  return doi;
+}
+
 async function dongBoFile(cauHinh, rows, cay, mtimeBanDau) {
   let mtime = mtimeBanDau;
   const soGhi = await nenTang.docSoGhi(cauHinh.THU_MUC_GOC);
   const boKhoiSoTong = [];
   const COT = cayThuMuc.COT.map((c) => c.key);
+  let nasPathDoi = false;
   let i = 0;
 
   log("\n── Quét thư mục và đồng bộ ──");
@@ -128,6 +153,7 @@ async function dongBoFile(cauHinh, rows, cay, mtimeBanDau) {
       // quyetDinh nhận danh sách ĐẦY ĐỦ, KHÔNG phải soKhop().canDay — xem bẫy trong
       // HOP-DONG.md. Lọc trước là sinh cảnh báo giả cho MỌI file đang khớp hai bên.
       const qd = keoVe.quyetDinh(soGhi, onDinh, row[cot] || [], row.id, cot);
+      if (datNasPath(cauHinh, row, cot, onDinh)) nasPathDoi = true;
       if (qd.dayLen.length) { dsCanDay[cot] = qd.dayLen; coViec = true; }
       for (const f of qd.keoVe) dsKeoVe.push({ f, duongDanCot, cot });
       for (const m of qd.canQuyet) canQuyet.push(m);
@@ -139,6 +165,20 @@ async function dongBoFile(cauHinh, rows, cay, mtimeBanDau) {
 
     if (coViec) mtime = await dayMotDong(cauHinh, rows, row, dsCanDay, soGhi, mtime);
     for (const m of dsKeoVe) await keoMot(cauHinh, m, row, soGhi);
+  }
+
+  // Ghi đường dẫn NAS vào bảng — MỘT lần cho cả lần chạy, khác với việc đẩy file
+  // (ghi ngay từng dòng). Ở đây gom được vì hỏng thì chẳng mất gì: không file nào
+  // nằm chờ trên S3, chỉ là nút "mở trong Explorer" chưa dùng được tới lần sau.
+  // Cũng vì thế mà lỗi ở đây chỉ thành cảnh báo, không làm đứt cả lần chạy.
+  if (nasPathDoi && !chayKho) {
+    try {
+      const r = await nenTang.ghiBangMotDong(cauHinh, rows, mtime);
+      mtime = r.mtime;
+    } catch (e) {
+      nhomCanhBao.push("Không ghi được đường dẫn NAS vào bảng (" + e.message
+        + "). File vẫn đồng bộ đúng, chỉ nút “mở trong Explorer” chưa dùng được — chạy lại là xong.");
+    }
   }
 
   if (!chayKho) mtime = await hoiThayBanLech(cauHinh, rows, soGhi, mtime);
@@ -197,6 +237,15 @@ async function dayMotDong(cauHinh, rows, row, dsCanDay, soGhi, mtime) {
 
   for (const f of kq.daDay) {
     if (!Array.isArray(row[f.cot])) row[f.cot] = [];
+    // Đặt đường dẫn NAS ngay lúc đẩy: vòng quét ở trên đã chạy XONG trước khi file
+    // này vào bảng, nên không đặt ở đây thì phải chờ tới lần chạy sau nút mới dùng
+    // được — đúng lúc người ta vừa thả bản vẽ vào và muốn bấm ngay.
+    const dia = (dsCanDay[f.cot] || []).find(
+      (x) => String(x.ten || "").toLowerCase() === String(f.name || "").toLowerCase());
+    if (dia && dia.duongDan) {
+      const td = path.relative(cauHinh.THU_MUC_GOC, dia.duongDan);
+      if (td && !td.startsWith("..")) f.nasPath = td;
+    }
     row[f.cot].push(f);
     ghiSo(soGhi, row.id, f.cot, f.name, f.size);
   }

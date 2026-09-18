@@ -29,7 +29,7 @@ const chayKho = !THUC_HIEN;
 
 const log = (s) => console.log(s);
 const nhomLoi = [], nhomCanhBao = [], canQuyet = [];
-let soDay = 0, soKeo = 0, soCho = 0;
+let soDay = 0, soKeo = 0, soCho = 0, soDuong = 0;
 
 class LoiDung extends Error {}
 const dung = (msg) => { throw new LoiDung(msg); };
@@ -117,7 +117,7 @@ function datNasPath(cauHinh, row, cot, dsDia) {
     // relative() trả chuỗi bắt đầu bằng ".." khi file nằm NGOÀI thư mục gốc. Ghi
     // cái đó vào bảng là cho nút trên web trỏ ra ngoài phạm vi đồng bộ — bỏ qua.
     if (!tuongDoi || tuongDoi.startsWith("..")) continue;
-    if (f.nasPath !== tuongDoi) { f.nasPath = tuongDoi; doi = true; }
+    if (f.nasPath !== tuongDoi) { f.nasPath = tuongDoi; doi = true; soDuong++; }
   }
   return doi;
 }
@@ -283,6 +283,12 @@ function inBaoCao(cay) {
   log("  file đẩy lên    : " + soDay);
   log("  file kéo về     : " + soKeo);
   if (soCho) log("  file đang chép dở, để lần sau : " + soCho);
+  // Ghi đường dẫn KHÔNG di chuyển file nào — nói rõ ra, nếu không người dùng thấy
+  // "0 đẩy lên · 0 kéo về" mà bảng vẫn bị ghi lại thì không hiểu chuyện gì xảy ra.
+  if (soDuong) {
+    log("  ghi chỗ file nằm trên NAS : " + soDuong
+      + " file  (cho nút “mở trong Explorer”, không di chuyển gì)");
+  }
 
   if (cay.moCoi.length) {
     log("\n── Thư mục không khớp dòng nào (" + cay.moCoi.length + ") ──");

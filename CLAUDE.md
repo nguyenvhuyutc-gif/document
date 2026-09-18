@@ -70,6 +70,22 @@ nên khi hai cột có số file chưa gán khác nhau thì phần dưới ấy 
 file chưa gán vốn là ngoại lệ hiếm, đệm cho thẳng hàng chỉ tốn chỗ mà vẫn không nói
 được ghi chú thuộc về file nào.
 
+**Xếp file vào ô — nút ↑ ↓ (09/2026):** mỗi chip trong cột ghép cặp có cặp nút đẩy
+lên/xuống **đúng một ô**. Vị trí là `0 … slots.length-1` (ô ứng từng file PDF) rồi
+`slots.length` = khối "chưa gán"; `viTriTrongCot()` tính ra nó, `chuyenO()` di chuyển.
+
+- **Ô đích đang có file → hai file ĐỔI CHỖ.** Cột hay lệch nguyên một nấc sau khi
+  script đẩy hàng loạt lên, nên đổi chỗ là cách bấm vài lần xếp lại được cả cột.
+- Đẩy xuống quá ô cuối → file về khối chưa gán (`pairUid = ""`), **không biến mất**.
+- Ở hai đầu danh sách, nút vô hiệu vẫn **giữ chỗ** (`visibility: hidden`) — bỏ hẳn
+  thì chip ở hai đầu rộng khác chip ở giữa và cả cột nhìn răng cưa.
+- Dồn ghi chú sang file PDF **chỉ khi file đang RỜI** đi vào ô. File đi giữa các ô
+  vốn đã dồn rồi; dồn lại là nhân đôi ghi chú mỗi lần bấm.
+
+Bản trước 09/2026 là `ganVaoODau()` — chỉ file rời mới có nút, bấm là nhảy thẳng vào
+ô trống đầu tiên, không chọn được ô nào. `node scratch/thu-ghep-cap-file.mjs` canh cả
+hành vi mới lẫn hai biên (ô đầu, khối chưa gán).
+
 Kéo theo hai điều dễ quên: **ghi chú đi theo dòng** (lưu ở file PDF, không phải ở
 file đi kèm — nên mọi chỗ chuyển một file vào ô đều phải dồn ghi chú của nó sang
 file PDF), và `pairUid` phải **đi cùng file vào thùng rác** — `hoSoRac()` cùng hai

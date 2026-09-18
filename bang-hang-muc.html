@@ -405,12 +405,16 @@
     content: ""; flex: none; width: 5px; height: 5px; border-radius: 50%;
     background: var(--success); margin-right: 1px;
   }
-  .file-pair-up {
+  .file-pair-up, .file-pair-down {
     flex: none; width: 20px; height: 20px; border: none; background: none; cursor: pointer;
     color: var(--text-dim); line-height: 1; border-radius: 5px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
   }
-  .file-pair-up:hover { color: var(--accent); background: var(--accent-weak); }
+  .file-pair-up:hover, .file-pair-down:hover { color: var(--accent); background: var(--accent-weak); }
+  /* Ô đầu không có chỗ đi lên, khối chưa gán không có chỗ đi xuống. Giữ CHỖ của nút
+     thay vì bỏ hẳn — nếu không, chip ở hai đầu danh sách rộng khác chip ở giữa và
+     cả cột nhìn răng cưa. */
+  .file-pair-up[disabled], .file-pair-down[disabled] { visibility: hidden; cursor: default; }
   /* Thanh tiến độ tải lên: nền ô đổ màu theo biến --up (0→1) do JS đặt.
      Không thêm DOM mới — ô file được render lại liên tục trong lúc đồng bộ. */
   .files-cell.uploading {
@@ -786,7 +790,8 @@
   body.is-viewonly #btnAdd, body.is-viewonly #btnDel, body.is-viewonly #btnImport, body.is-viewonly #btnHide,
   body.is-viewonly #btnIndent, body.is-viewonly #btnOutdent, body.is-viewonly #btnAddEmpty,
   body.is-viewonly #btnNewPlan, body.is-viewonly .plan-card__actions,
-  body.is-viewonly .file-add, body.is-viewonly .file-del, body.is-viewonly .file-pair-up,
+  body.is-viewonly .file-add, body.is-viewonly .file-del,
+  body.is-viewonly .file-pair-up, body.is-viewonly .file-pair-down,
   body.is-viewonly .row-add, body.is-viewonly .col-check input,
   body.is-viewonly #btnView, body.is-viewonly .col-grip, body.is-viewonly .row-grip,
   body.is-viewonly .view-pop,
@@ -798,6 +803,7 @@
   body.is-viewonly td[data-ck="filesTvgs"] .file-add,
   body.is-viewonly td[data-ck="filesTvgs"] .file-del,
   body.is-viewonly td[data-ck="filesTvgs"] .file-pair-up,
+  body.is-viewonly td[data-ck="filesTvgs"] .file-pair-down,
   body.no-admin td[data-ck="filesTvgs"] .file-del { display: inline-flex !important; }
   /* Menu "Hiển thị" chỉ quản trị dùng: ẩn/hiện cột, độ cao dòng, bề rộng cột,
      hiện lại dòng đã ẩn. Người khác luôn thấy bố cục mặc định (cờ `off` trong
@@ -1685,9 +1691,21 @@
     return { slots: slots, roi: conLai };
   }
 
-  // Gán một file DWG đang rời vào ô trống ĐẦU TIÊN của dòng. Hết ô trống thì nói
-  // thẳng, chứ không im lặng bỏ qua để người dùng tưởng đã gán xong.
-  function ganVaoODau(rowId, fkey, fid) {
+  // Vị trí của một file trong cột ghép cặp: 0..slots.length-1 là ô ứng với từng file
+  // PDF, còn slots.length là khối "chưa gán" ở đáy. Khối ấy tính là MỘT vị trí chung
+  // dù đang chứa mấy file — chúng không ứng với PDF nào nên không có thứ tự riêng.
+  function viTriTrongCot(cap, fid) {
+    for (var i = 0; i < cap.slots.length; i++) {
+      if (cap.slots[i].kem && fileKey(cap.slots[i].kem) === String(fid)) return i;
+    }
+    return cap.slots.length;
+  }
+
+  // Đẩy một file lên/xuống ĐÚNG MỘT ô. `huong` = -1 (lên) hoặc +1 (xuống).
+  // Ô đích đang có file thì HAI FILE ĐỔI CHỖ — cột hay bị lệch nguyên một nấc sau
+  // khi script đẩy hàng loạt lên, và đổi chỗ là cách bấm vài lần xếp lại được cả cột.
+  // Xuống quá ô cuối thì file rời khỏi mọi ô, nằm ở khối "chưa gán".
+  function chuyenO(rowId, fkey, fid, huong) {
     if (!canEditCot(fkey)) return;
     var row = findRow(rowId);
     if (!row) return;
@@ -1696,27 +1714,42 @@
       if (fileKey(x) === String(fid)) f = x;
     });
     if (!f) return;
-    var trong = null;
-    capFile(row, fkey).slots.forEach(function (sl) { if (!trong && !sl.kem) trong = sl.pdf; });
-    if (!trong) { toast("Không còn ô trống — mỗi file PDF chỉ nhận một file ở cột này"); return; }
-    f.pairUid = fileKey(trong);
-    // Vào ô rồi thì file này không còn dòng ghi chú riêng nữa (ghi chú đi theo dòng,
-    // lưu ở file PDF). Dồn ghi chú cũ sang, y như lúc di trú dữ liệu — bỏ qua là
-    // người dùng thấy ghi chú biến mất ngay khi bấm gán.
-    // Ghi chú nằm ở file PDF — cột đó KHÔNG mở tự do. Người không có quyền sửa thì
-    // để nguyên ghi chú tại chỗ, không thì bản vá cột TVGS mang theo một thay đổi
-    // mà máy chủ không cho ghi, và ghi chú biến mất khỏi màn hình mà không lưu được.
-    if (f.note && canEdit()) {
-      trong.note = trong.note ? (trong.note + "<br>" + f.note) : f.note;
-      f.note = "";
+
+    var cap = capFile(row, fkey);
+    var tu = viTriTrongCot(cap, fid);
+    var den = tu + huong;
+    if (den < 0 || den > cap.slots.length) return;          // đã ở đầu hoặc cuối danh sách
+    if (tu === cap.slots.length && den === cap.slots.length) return;
+
+    var laRoi = tu === cap.slots.length;
+    var pairCu = laRoi ? "" : fileKey(cap.slots[tu].pdf);
+
+    if (den === cap.slots.length) {                          // rời khỏi ô, xuống khối chưa gán
+      f.pairUid = "";
+    } else {
+      var o = cap.slots[den];
+      f.pairUid = fileKey(o.pdf);
+      if (o.kem) o.kem.pairUid = pairCu;                     // file đang ở đó nhận chỗ cũ
+      // Vào ô rồi thì file này không còn dòng ghi chú riêng nữa (ghi chú đi theo ô,
+      // lưu ở file PDF). Dồn ghi chú cũ sang — bỏ qua là người dùng thấy ghi chú biến
+      // mất ngay khi bấm. Chỉ làm khi file ĐANG RỜI: file đi giữa các ô vốn đã dồn rồi.
+      //
+      // Ghi chú nằm ở file PDF — cột đó KHÔNG mở tự do. Người không có quyền sửa thì
+      // để nguyên ghi chú tại chỗ, không thì bản vá cột TVGS mang theo một thay đổi
+      // mà máy chủ không cho ghi, và ghi chú biến mất khỏi màn hình mà không lưu được.
+      if (laRoi && f.note && canEdit()) {
+        o.pdf.note = o.pdf.note ? (o.pdf.note + "<br>" + f.note) : f.note;
+        f.note = "";
+      }
     }
     luuFile(rowId, fkey); render();
-    toast("Đã gán “" + (f.name || "file") + "” vào dòng của “" + (trong.name || "file PDF") + "”");
   }
 
   // Một chip file: liên kết tải xuống + nút xoá. `roi` = file DWG chưa gán vào dòng
-  // PDF nào — hiện viền đứt, kèm nút gán vào ô trống đầu tiên.
-  function fileItem(row, fkey, f, roi) {
+  // PDF nào — hiện viền đứt. Ở cột ghép cặp còn có cặp nút ↑ ↓ đẩy file lên/xuống
+  // từng ô một; `mv` = {len, xuong} nói hướng nào còn đi được (null = cột thường,
+  // không có nút nào).
+  function fileItem(row, fkey, f, roi, mv) {
     var key = fileKey(f);
     var isNew = isUploadNew(f);
     var item = document.createElement("span");
@@ -1730,15 +1763,23 @@
     a.innerHTML = fileIconSvg + '<span class="fn"></span>';
     a.querySelector(".fn").textContent = shortFileName(f.name);
     item.appendChild(a);
-    if (roi) {
-      var up = document.createElement("button");
-      up.type = "button"; up.className = "file-pair-up";
-      up.setAttribute("data-id", row.id);
-      up.setAttribute("data-fid", key);
-      up.setAttribute("data-fkey", fkey);
-      up.setAttribute("title", "Gán file này vào ô trống đầu tiên");
-      up.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
-      item.appendChild(up);
+    if (mv) {
+      [
+        { cls: "file-pair-up", di: mv.len, nhan: roi ? "Đưa file này lên ô cuối" : "Đẩy lên một ô",
+          d: "M12 19V5M5 12l7-7 7 7" },
+        { cls: "file-pair-down", di: mv.xuong, nhan: "Đẩy xuống một ô",
+          d: "M12 5v14M19 12l-7 7-7-7" },
+      ].forEach(function (n) {
+        var b = document.createElement("button");
+        b.type = "button"; b.className = n.cls;
+        b.setAttribute("data-id", row.id);
+        b.setAttribute("data-fid", key);
+        b.setAttribute("data-fkey", fkey);
+        if (n.di) b.setAttribute("title", n.nhan);
+        else b.setAttribute("disabled", "disabled");
+        b.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="' + n.d + '"/></svg>';
+        item.appendChild(b);
+      });
     }
     var del = document.createElement("button");
     del.type = "button"; del.className = "file-del";
@@ -1780,10 +1821,15 @@
       // hiện file, chưa có thì hiện ô trống cùng chiều cao kèm nút +. Nhìn ngang là
       // biết file nào đi với bản PDF nào, và dòng nào còn thiếu.
       var cap = capFile(row, fkey);
-      cap.slots.forEach(function (s) {
-        list.appendChild(s.kem ? fileItem(row, fkey, s.kem) : oTrongCad(fileKey(s.pdf)));
+      cap.slots.forEach(function (s, i) {
+        // Xuống LUÔN đi được: hết ô thì file rơi vào khối "chưa gán" ở đáy.
+        list.appendChild(s.kem
+          ? fileItem(row, fkey, s.kem, false, { len: i > 0, xuong: true })
+          : oTrongCad(fileKey(s.pdf)));
       });
-      cap.roi.forEach(function (f) { list.appendChild(fileItem(row, fkey, f, true)); });
+      cap.roi.forEach(function (f) {
+        list.appendChild(fileItem(row, fkey, f, true, { len: cap.slots.length > 0, xuong: false }));
+      });
     } else {
       (Array.isArray(row[fkey]) ? row[fkey] : []).forEach(function (f) {
         list.appendChild(fileItem(row, fkey, f));
@@ -2875,10 +2921,12 @@
       }
       return;
     }
-    var fup = e.target.closest(".file-pair-up");
-    if (fup) {
+    var fmv = e.target.closest(".file-pair-up, .file-pair-down");
+    if (fmv) {
       e.preventDefault();
-      ganVaoODau(fup.getAttribute("data-id"), fup.getAttribute("data-fkey") || "filesCad", fup.getAttribute("data-fid"));
+      if (fmv.hasAttribute("disabled")) return;
+      chuyenO(fmv.getAttribute("data-id"), fmv.getAttribute("data-fkey") || "filesCad",
+        fmv.getAttribute("data-fid"), fmv.classList.contains("file-pair-up") ? -1 : 1);
       return;
     }
     var fdel = e.target.closest(".file-del");

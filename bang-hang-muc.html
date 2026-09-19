@@ -359,16 +359,22 @@
   .cell.note-line--row { color: var(--text-mid); }
   .files-cell { padding: 5px 8px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
   .files-list { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-  .file-item { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; height: 24px; }
+  /* Chip chiếm TRỌN bề rộng ô: phần chữ co giãn, các nút bám mép phải. Nhờ vậy
+     mọi chip trong một cột cùng rộng và cột nút (↑ ↓ 📁 🗑) thẳng hàng — trước
+     đây chip co theo tên file nên mỗi dòng nút lệch một kiểu. */
+  .file-item { display: flex; align-items: center; gap: 3px; width: 100%; height: 24px; }
   .file-link {
-    display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%;
+    display: inline-flex; align-items: center; gap: 5px; flex: 1 1 0; min-width: 0;
     padding: 3px 8px; border-radius: 5px; background: var(--accent-weak); border: 1px solid var(--accent-line);
     color: var(--accent); font-size: .78rem; font-weight: 600; text-decoration: none;
     transition: background .12s, box-shadow .12s;
   }
   .file-link:hover { background: var(--surface); box-shadow: 0 0 0 2px var(--accent-weak); }
   .file-link svg { flex: none; opacity: .85; }
-  .file-link .fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* flex:1 + min-width:0 là bắt buộc: trong flex, phần tử chữ mặc định không co
+     dưới bề rộng nội dung, nên ellipsis không bao giờ kích hoạt và chip lại nở
+     theo tên file — đúng cái lệch cột ta đang chữa. */
+  .file-link .fn { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .file-del {
     flex: none; width: 20px; height: 20px; border: none; background: none; cursor: pointer;
     color: var(--text-dim); line-height: 1; border-radius: 5px; padding: 0;
@@ -414,7 +420,7 @@
   /* Ô đầu không có chỗ đi lên, khối chưa gán không có chỗ đi xuống. Giữ CHỖ của nút
      thay vì bỏ hẳn — nếu không, chip ở hai đầu danh sách rộng khác chip ở giữa và
      cả cột nhìn răng cưa. */
-  .file-pair-up[disabled], .file-pair-down[disabled] { visibility: hidden; cursor: default; }
+  .file-pair-up[disabled], .file-pair-down[disabled], .file-mo-nas[disabled] { visibility: hidden; cursor: default; }
   /* Thanh tiến độ tải lên: nền ô đổ màu theo biến --up (0→1) do JS đặt.
      Không thêm DOM mới — ô file được render lại liên tục trong lúc đồng bộ. */
   .files-cell.uploading {
@@ -1635,9 +1641,12 @@
   var fileIconSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.49"/></svg>';
 
   // hiển thị tối đa 5 ký tự tên phiếu — hover để xem tên đầy đủ (tooltip)
+  // Trả nguyên tên; cắt là việc của CSS (.fn ellipsis theo bề rộng thật của ô).
+  // Bản cũ cắt cứng 5 ký tự + "…" — mỗi tên cắt ra một bề rộng khác nhau ("QUYEN…"
+  // rộng hơn "C…"), chip nở theo, cột nút phía sau lệch từng dòng. Giữ tên hàm để
+  // không đổi chỗ gọi.
   function shortFileName(name) {
-    name = String(name || "file");
-    return name.length > 5 ? name.slice(0, 5) + "…" : name;
+    return String(name || "file");
   }
   // thời điểm tải lên → "dd/mm/yyyy hh:mm:ss" (rỗng nếu file cũ chưa có mốc thời gian)
   function fmtUploadTime(v) {
@@ -1892,11 +1901,19 @@
     }
     // Nút "mở trong Explorer" — chỉ có khi script đồng bộ đã ghi chỗ file nằm trên
     // NAS. File tải thẳng qua web chưa có, tới lần đồng bộ kế tiếp mới hiện nút.
-    if (f.nasPath && canEdit()) {
+    // Thiếu đường dẫn thì vẫn dựng nút nhưng vô hiệu + ẩn (visibility:hidden) để
+    // GIỮ CHỖ — cùng lý do với ↑↓ ở hai đầu danh sách: bỏ hẳn là chip đó rộng hơn
+    // chip bên cạnh 20px và cột 🗑 lệch. Người chỉ xem thì không dựng gì cả — CSS
+    // đã ẩn hết nút cho họ, chip tự lấp phần còn lại nên vẫn thẳng.
+    if (canEdit()) {
       var mo = document.createElement("button");
       mo.type = "button"; mo.className = "file-mo-nas";
-      mo.setAttribute("data-nas", f.nasPath);
-      mo.setAttribute("title", "Mở trong Explorer\n" + f.nasPath + "\n\nGiữ Ctrl khi bấm để đổi thư mục gốc trên máy này");
+      if (f.nasPath) {
+        mo.setAttribute("data-nas", f.nasPath);
+        mo.setAttribute("title", "Mở trong Explorer\n" + f.nasPath + "\n\nGiữ Ctrl khi bấm để đổi thư mục gốc trên máy này");
+      } else {
+        mo.setAttribute("disabled", "disabled");
+      }
       mo.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
       item.appendChild(mo);
     }
@@ -3056,6 +3073,7 @@
     var fmo = e.target.closest(".file-mo-nas");
     if (fmo) {
       e.preventDefault();
+      if (fmo.hasAttribute("disabled")) return;   // placeholder giữ chỗ, không có đường dẫn
       moTrongExplorer(fmo.getAttribute("data-nas"), e.ctrlKey || e.metaKey);
       return;
     }

@@ -268,12 +268,35 @@ module.exports = async (req, res) => {
       // đồng bộ lại liên tục.
       const cur2 = await collection.findOne(
         { _id: planId2 },
-        { projection: { updatedAt: 1, "data.rows.id": 1 } }
+        { projection: { updatedAt: 1, "data.rows.id": 1, ["data.rows." + COT_TU_DO]: 1 } }
       );
       if (!cur2) return sendJson(res, 404, { ok: false, error: "Không tìm thấy kế hoạch" });
       const dsDong = (cur2.data && Array.isArray(cur2.data.rows)) ? cur2.data.rows : [];
-      if (!dsDong.some((d) => d && String(d.id) === String(rowId))) {
+      const dongCu = dsDong.find((d) => d && String(d.id) === String(rowId));
+      if (!dongCu) {
         return sendJson(res, 404, { ok: false, error: "Không tìm thấy dòng" });
+      }
+
+      // NGƯỜI KHÔNG MẬT KHẨU CHỈ ĐƯỢC THÊM, KHÔNG ĐƯỢC BỚT (09/2026).
+      //
+      // Lệnh $set bên dưới thay CẢ mảng filesTvgs bằng `sach`. Nghĩa là gửi lên một
+      // mảng thiếu một file cũng chính là xoá file đó khỏi bảng — không cần gọi
+      // ?action=trash, không chạm tới quyền của thùng rác. Chặn đường trash mà bỏ
+      // quên chỗ này thì cửa vẫn mở toang, chỉ khác lối vào.
+      //
+      // Người có mật khẩu sửa vẫn bớt được: họ đi đường ghi cả document, nhưng nếu
+      // có gọi endpoint này thì cũng không bị chặn oan.
+      const role2 = getRole(req);
+      if (role2 !== "admin" && role2 !== "edit") {
+        const cu = Array.isArray(dongCu[COT_TU_DO]) ? dongCu[COT_TU_DO] : [];
+        const conLai = new Set(sach.map((f) => String(f.id)));
+        const mat = cu.filter((f) => f && f.id && !conLai.has(String(f.id)));
+        if (mat.length) {
+          return sendJson(res, 403, {
+            ok: false, needKey: true,
+            error: "Cần mật khẩu quản trị để xoá ý kiến TVGS. Bạn vẫn tải file mới lên được.",
+          });
+        }
       }
 
       let t2 = Date.now();

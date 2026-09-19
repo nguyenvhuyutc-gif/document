@@ -820,12 +820,10 @@
   /* Cột "Ý kiến TVGS" mở cho mọi người, kể cả chưa đăng nhập: nút của RIÊNG cột này
      không bị ẩn theo quyền. Phải đặt SAU hai khối trên và cũng dùng !important thì
      mới thắng được chúng. */
-  body.is-viewonly td[data-ck="filesTvgs"] .file-add,
-  body.is-viewonly td[data-ck="filesTvgs"] .file-del,
-  body.no-admin td[data-ck="filesTvgs"] .file-del { display: inline-flex !important; }
-  /* Ngoại lệ TVGS chỉ nới ĐÚNG hai việc: tải ý kiến lên, và bỏ ý kiến vào thùng rác.
-     Nút ↑ ↓ (xếp file vào ô) và nút mở trong Explorer KHÔNG nằm trong đó — chúng
-     sắp lại hồ sơ của cả dòng, và lộ đường dẫn thư mục nội bộ. */
+  body.is-viewonly td[data-ck="filesTvgs"] .file-add { display: inline-flex !important; }
+  /* Ngoại lệ TVGS chỉ nới ĐÚNG MỘT việc: tải ý kiến lên (nút + File). Xoá, xếp file
+     vào ô (↑ ↓) và mở trong Explorer đều KHÔNG nằm trong đó — xoá là quyền quản trị
+     ở mọi cột, xếp chỗ là sắp lại hồ sơ cả dòng, còn nút mở lộ đường dẫn nội bộ. */
   /* Menu "Hiển thị" chỉ quản trị dùng: ẩn/hiện cột, độ cao dòng, bề rộng cột,
      hiện lại dòng đã ẩn. Người khác luôn thấy bố cục mặc định (cờ `off` trong
      COLUMNS). Ẩn cả tay kéo bề rộng cột và độ cao dòng cho khớp. */
@@ -1139,7 +1137,10 @@
   // api/files.js); hai hàm dưới đây chỉ để nút hiện/ẩn cho khớp.
   var COT_TU_DO = "filesTvgs";
   function canEditCot(fk) { return fk === COT_TU_DO || canEdit(); }
-  function canXoaFile(fk) { return fk === COT_TU_DO || canAdmin(); }
+  // Xoá file là quyền quản trị ở MỌI cột, kể cả cột Ý kiến TVGS (09/2026). Ngoại lệ
+  // mở tự do của cột đó nay chỉ còn đúng một việc: TẢI Ý KIẾN LÊN. Xem và tải xuống
+  // vẫn tự do như trước. Giữ tham số `fk` cho khớp chỗ gọi, dù không còn dùng tới.
+  function canXoaFile(fk) { return canAdmin(); }
   function applyRole() {
     // đổi quyền → dựng lại bố cục: chỉ xem luôn thấy bảng mặc định (xem ghi chú ở applyView)
     document.body.classList.toggle("is-viewonly", !canEdit());
@@ -1822,7 +1823,7 @@
   function chuyenO(rowId, fkey, fid, huong) {
     // canEdit(), KHÔNG phải canEditCot(): xếp file vào ô là sắp lại hồ sơ của cả
     // dòng, nên đòi mật khẩu ở MỌI cột — kể cả cột Ý kiến TVGS vốn mở tự do cho
-    // việc tải lên và bỏ vào thùng rác. Bên TVGS vẫn gửi ý kiến được như cũ, chỉ
+    // việc tải ý kiến lên. Bên TVGS vẫn gửi ý kiến được như cũ, chỉ
     // không tự xếp chỗ; người có mật khẩu xếp hộ.
     if (!canEdit()) return;
     var row = findRow(rowId);

@@ -47,7 +47,7 @@ Một dòng có **năm** mảng file, hằng `FKEYS` giữ danh sách:
 |---|---|---|
 | `files` | File đang trình — **PDF** | cột gốc, các cột khác bám theo nó |
 | `filesCad` | File đang trình — **DWG + Excel** (và mọi đuôi khác) | có |
-| `filesTvgs` | **Ý kiến TVGS** — mở cho mọi quyền, xem § Phân quyền | có |
+| `filesTvgs` | **Ý kiến TVGS** — ai cũng TẢI LÊN được, xem § Phân quyền | có |
 | `filesDuyet` | File đã duyệt | không |
 | `filesChapThuan` | Hồ sơ chấp thuận | không |
 
@@ -88,8 +88,8 @@ Bản trước 09/2026 là `ganVaoODau()` — chỉ file rời mới có nút, b
 hành vi mới lẫn hai biên (ô đầu, khối chưa gán).
 
 **Xếp file vào ô đòi `canEdit()` ở MỌI cột** — kể cả `filesTvgs`. Ngoại lệ mở tự do
-của cột TVGS chỉ nới đúng hai việc: tải ý kiến lên, và bỏ ý kiến vào thùng rác. Xếp
-chỗ là sắp lại hồ sơ của cả dòng nên không nằm trong đó.
+của cột TVGS chỉ nới đúng MỘT việc: tải ý kiến lên. Xếp chỗ là sắp lại hồ sơ của cả
+dòng nên không nằm trong đó.
 
 ### Nút "mở trong Explorer" — `nasPath`
 
@@ -305,10 +305,14 @@ API dùng 2 mật khẩu đặt qua biến môi trường trên Vercel:
 - Xem/tải file xuống (GET) tự do — **trừ file đang nằm trong thùng rác**, thứ chỉ
   quản trị tải được. **Không đặt cả hai biến → không khoá gì** (tương thích cũ).
 
-**Ngoại lệ có chủ ý — cột "Ý kiến TVGS" (`filesTvgs`):** ai mở được trang cũng tải
-file lên và bỏ vào thùng rác được ở **riêng cột đó**, không cần mật khẩu — bên tư
-vấn giám sát không cầm mật khẩu của chủ đầu tư. Ba chốt giữ cho ngoại lệ này không
-loang ra chỗ khác:
+**Ngoại lệ có chủ ý — cột "Ý kiến TVGS" (`filesTvgs`):** ai mở được trang cũng
+**tải file lên** ở riêng cột đó, không cần mật khẩu — bên tư vấn giám sát không cầm
+mật khẩu của chủ đầu tư. Xem và tải xuống vẫn tự do như mọi cột.
+
+**Ngoại lệ chỉ còn đúng một việc là TẢI LÊN (09/2026).** Trước đó khách còn bỏ được
+ý kiến vào thùng rác; nay xoá là quyền quản trị ở mọi cột, kể cả cột này.
+
+Bốn chốt giữ cho ngoại lệ không loang:
 
 1. Họ **không POST được cả document**. Đường ghi thường vẫn đòi `EDIT_KEY`; cột này
    đi lối riêng `POST /api/data?action=tvgs&plan=&row=` chỉ thay đúng một mảng của
@@ -316,12 +320,24 @@ loang ra chỗ khác:
 2. Mọi mục gửi lên bị `locFileTvgs()` lọc về đúng các trường đã biết, và **id phải
    là file mang dấu `cot: "filesTvgs"`** — dấu này do `api/files.js` đóng lúc ký URL
    tải lên, không phải thứ client khai.
-3. Thùng rác cho khách cũng kiểm bằng dấu `cot` đó, **không** tin `fkey` client gửi.
-   Khôi phục, xoá vĩnh viễn và xem thùng rác vẫn chỉ quản trị.
+3. **`?action=trash` không còn mở cho khách.** `khachDuocPhep` trong `api/files.js`
+   chỉ còn `sign-upload` (đúng cột TVGS) và `confirm`. `confirm` bắt buộc phải mở:
+   nó là bước cuối của chính phiên tải lên, chặn nó là file nằm trên S3 mà không mục
+   nào trỏ tới — mồ côi ngay lúc vừa tải xong.
+4. **Khách chỉ được THÊM, không được bớt.** Chốt này dễ quên nhất và là chỗ hổng
+   thật: lệnh `$set` của `?action=tvgs` thay **cả mảng** `filesTvgs`, nên gửi lên
+   một mảng thiếu một file cũng chính là xoá file đó khỏi bảng — không đi qua thùng
+   rác, không chạm tới quyền nào. Chặn đường `trash` mà bỏ quên chỗ này thì cửa vẫn
+   mở toang, chỉ khác lối vào. Máy chủ so mảng gửi lên với mảng đang có; thiếu id
+   nào → 403.
 
-Đổi lại: **ai có link cũng tải được file lên cột đó** (tới 500MB/file) và bỏ được ý
-kiến của người khác vào thùng rác — quản trị khôi phục lại được trong 30 ngày. Muốn
-siết thì thêm một mật khẩu riêng cho TVGS thay vì mở tự do.
+Đổi lại: **ai có link cũng tải được file lên cột đó** (tới 500MB/file). Họ không xoá
+được gì, kể cả ý kiến của chính mình — nhờ quản trị. Muốn siết cả việc tải lên thì
+thêm một mật khẩu riêng cho TVGS thay vì mở tự do.
+
+`node scripts/thu-quyen-tvgs.mjs` kiểm cả bốn chốt trên API thật, gồm hai đường lách
+(thùng rác và gửi mảng thiếu) và phép kiểm ngược: quản trị vẫn phải xoá được, và
+khách gửi nguyên danh sách (không bớt) vẫn phải ghi được.
 
 Client gửi mật khẩu qua header `x-edit-key` (lưu localStorage, nhập ở nút đăng
 nhập trên giao diện). Endpoint `GET /api/data?whoami=1` trả `{role, protected}`

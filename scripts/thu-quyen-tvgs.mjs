@@ -284,22 +284,55 @@ try {
     else loi("ghi cả bảng LỌT cho người không mật khẩu — LỖ HỔNG NẶNG", "HTTP " + d.ma);
   }
 
-  // ---------- 7. xoá file TVGS không mật khẩu → vào thùng rác, không mất hẳn ----------
-  console.log("\n  ── 7. xoá file TVGS khi không có mật khẩu ──");
+  // ---------- 7. khách KHÔNG xoá được file TVGS (đổi 09/2026) ----------
+  // Trước đây khách bỏ được ý kiến vào thùng rác. Nay ngoại lệ của cột TVGS chỉ còn
+  // đúng một việc: TẢI LÊN. Xoá là quyền quản trị ở mọi cột.
+  console.log("\n  ── 7. khách KHÔNG xoá được file TVGS ──");
   if (idTvgs) {
     const t = await api("/api/files?action=trash", {
       method: "POST",
       body: { items: [{ id: idTvgs, planId: KE_HOACH_THU, rowId: DONG_THU, fkey: "filesTvgs", rowName: "dòng thử", note: "ý kiến thử" }] },
     });
+    if (t.ma === 401) ok("không mật khẩu: đường thùng rác bị chặn 401");
+    else loi("khách VẪN bỏ được file TVGS vào thùng rác", "HTTP " + t.ma + " " + JSON.stringify(t.j));
+
     const doc = await colFile.findOne({ _id: idTvgs });
-    if (t.ma === 200 && t.j?.trashed === 1) ok("không mật khẩu: bỏ được file TVGS vào thùng rác");
-    else loi("không bỏ được vào thùng rác", "HTTP " + t.ma + " " + JSON.stringify(t.j));
-    if (doc?.status === "trashed") ok("file chuyển sang trạng thái 'trashed', KHÔNG bị xoá hẳn");
-    else loi("trạng thái file sau khi xoá không đúng", String(doc?.status));
-    if (doc?.key) ok("object trên S3 vẫn còn (khôi phục được trong 30 ngày)");
+    if (doc && doc.status !== "trashed") ok("file vẫn nguyên, không bị đánh dấu trashed");
+    else loi("file đã bị đưa vào thùng rác dù lệnh bị chặn", String(doc?.status));
+
+    // LỖ HỔNG THỨ HAI, không đi qua thùng rác: ?action=tvgs thay CẢ mảng filesTvgs.
+    // Gửi mảng rỗng là gỡ sạch file khỏi bảng — "xoá" mà không chạm quyền trash.
+    const goBang = await api("/api/data?action=tvgs&plan=" + KE_HOACH_THU + "&row=" + DONG_THU, {
+      method: "POST", body: { files: [] },
+    });
+    if (goBang.ma === 403) ok("không mật khẩu: gửi mảng THIẾU file → chặn 403 (không xoá được kiểu lách)");
+    else loi("LỖ HỔNG: khách gỡ được file khỏi bảng bằng cách gửi mảng thiếu", "HTTP " + goBang.ma);
+
+    const sauKhiThu = await api("/api/data?plan=" + KE_HOACH_THU);
+    const dongSau = (sauKhiThu.j?.data?.rows || []).find((r) => String(r.id) === String(DONG_THU));
+    const conTrenBang = (dongSau?.filesTvgs || []).some((f) => String(f.id) === String(idTvgs));
+    if (conTrenBang) ok("file vẫn nằm trên bảng sau cú lách");
+    else loi("file đã biến khỏi bảng — cú lách THÀNH CÔNG", JSON.stringify(dongSau?.filesTvgs));
+
+    // Nhưng THÊM thì vẫn phải được: đó là cả mục đích của ngoại lệ này.
+    const themDuoc = await api("/api/data?action=tvgs&plan=" + KE_HOACH_THU + "&row=" + DONG_THU, {
+      method: "POST", body: { files: dongSau?.filesTvgs || [] },
+    });
+    if (themDuoc.ma === 200) ok("không mật khẩu: gửi nguyên danh sách (không bớt) vẫn ghi được");
+    else loi("chặn oan cả thao tác hợp lệ của bên TVGS", "HTTP " + themDuoc.ma + " " + JSON.stringify(themDuoc.j));
+
+    const qtXoa = await api("/api/files?action=trash", {
+      method: "POST", key: KEY_QT,
+      body: { items: [{ id: idTvgs, planId: KE_HOACH_THU, rowId: DONG_THU, fkey: "filesTvgs", rowName: "dòng thử", note: "ý kiến thử" }] },
+    });
+    if (qtXoa.ma === 200 && qtXoa.j?.trashed === 1) ok("quản trị vẫn xoá được file TVGS");
+    else loi("quản trị mất quyền xoá — siết quá tay", "HTTP " + qtXoa.ma + " " + JSON.stringify(qtXoa.j));
+
+    const doc2 = await colFile.findOne({ _id: idTvgs });
+    if (doc2?.status === "trashed") ok("quản trị xoá → vào thùng rác, KHÔNG mất hẳn");
+    else loi("trạng thái sau khi quản trị xoá không đúng", String(doc2?.status));
+    if (doc2?.key) ok("object trên S3 vẫn còn (khôi phục được trong 30 ngày)");
     else loi("mất key S3 — không khôi phục được");
-    if (doc?.origin?.note === "ý kiến thử") ok("ghi chú của file được giữ lại để khôi phục");
-    else loi("mất ghi chú khi vào thùng rác", JSON.stringify(doc?.origin));
 
     const tai = await api("/api/files?id=" + idTvgs);
     if (tai.ma === 401 || tai.ma === 404) ok("file trong thùng rác: người không mật khẩu KHÔNG tải xuống được");

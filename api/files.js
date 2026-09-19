@@ -210,15 +210,18 @@ module.exports = async (req, res) => {
     // Nút thùng rác ở giao diện bị ẩn khi không phải quản trị, nhưng canAdmin() bên
     // đó chỉ ẩn nút — ai mở DevTools cũng gọi thẳng được. Hàng rào thật nằm ở đây.
     //
-    // NGOẠI LỆ: cột "Ý kiến TVGS" mở cho người không mật khẩu, nhưng CHỈ hai việc —
-    // tải lên và bỏ vào thùng rác. Cờ dưới đây mới chỉ mở cửa; việc "có đúng là file
+    // NGOẠI LỆ: cột "Ý kiến TVGS" mở cho người không mật khẩu, nhưng CHỈ MỘT việc —
+    // TẢI LÊN. Xoá là quyền quản trị ở mọi cột (đổi 09/2026). Cờ dưới đây mới chỉ mở cửa; việc "có đúng là file
     // của cột đó không" được kiểm trong từng nhánh bằng trường `cot` do CHÍNH máy chủ
     // đóng lúc ký URL. Không bao giờ tin tham số client gửi kèm lúc xoá.
     const role = getRole(req);
     const cot = url.searchParams.get("cot") || "";
     const khach = role !== "admin" && role !== "edit";
+    // Khách chỉ TẢI LÊN được ở cột TVGS, không xoá (09/2026). `confirm` phải mở vì
+    // nó là bước cuối của chính phiên tải lên — chặn nó là file nằm trên S3 mà
+    // không mục nào trỏ tới, thành mồ côi ngay lúc tải xong.
     const khachDuocPhep = khach && (
-      (action === "sign-upload" && cot === COT_TU_DO) || action === "confirm" || action === "trash"
+      (action === "sign-upload" && cot === COT_TU_DO) || action === "confirm"
     );
     const laThungRac = action === "trash" || action === "restore"
       || (req.method === "GET" && url.searchParams.get("trash"));

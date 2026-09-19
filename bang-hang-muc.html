@@ -1401,7 +1401,10 @@
       if (soMoi !== soFileMoiTruoc) { soFileMoiTruoc = soMoi; render(); }
 
       var pid = state.planId;
-      fetch(API + "?plan=" + encodeURIComponent(pid)).then(function (r) { return r.json(); }).then(function (j) {
+      // authHeaders() ở GET là bắt buộc từ 09/2026: máy chủ cắt `nasPath` khỏi dữ liệu
+      // trả cho người chỉ xem. Gọi trần là mỗi lượt đọc lại nuốt mất đường dẫn, nút
+      // "mở trong Explorer" biến mất dù người dùng đang đăng nhập — không lỗi nào báo.
+      fetch(API + "?plan=" + encodeURIComponent(pid), { headers: authHeaders() }).then(function (r) { return r.json(); }).then(function (j) {
         if (state.planId !== pid) return;             // đã chuyển kế hoạch trong lúc chờ
         if (!j || !j.ok || !j.data || !Array.isArray(j.data.rows)) return;
         if (j.mtime && j.mtime !== serverMtime) {
@@ -4476,7 +4479,8 @@
   function openPlan(id) {
     resetTableState();
     if (storageMode === "server") {
-      fetch(API + "?plan=" + encodeURIComponent(id)).then(function (r) { return r.json(); }).then(function (j) {
+      // GET kèm mật khẩu — xem ghi chú ở vòng đọc lại định kỳ: thiếu là mất `nasPath`.
+      fetch(API + "?plan=" + encodeURIComponent(id), { headers: authHeaders() }).then(function (r) { return r.json(); }).then(function (j) {
         if (!j || !j.ok) { toast("Không mở được kế hoạch"); showPlanScreen(); return; }
         state.planId = id;
         state.planName = j.name || (plansCache.filter(function (p) { return p.id === id; })[0] || {}).name || "Kế hoạch";

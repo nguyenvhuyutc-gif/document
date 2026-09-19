@@ -768,6 +768,19 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: none; }
+  /* Thông báo đứng lâu (hướng dẫn nhiều chữ) phải BẤM TẮT ĐƯỢC. Mặc định .toast có
+     pointer-events:none để không chắn thao tác — hợp với thông báo 2 giây, nhưng
+     nửa phút che góc màn hình mà không đóng được thì thành phiền. */
+  .toast--lau {
+    pointer-events: auto; cursor: pointer;
+    max-width: min(620px, 92vw); text-align: left; line-height: 1.5;
+    align-items: flex-start; padding-right: 14px;
+  }
+  .toast--lau .dot { margin-top: 6px; }
+  .toast--lau::after {
+    content: "✕"; flex: none; opacity: .5; font-weight: 700; margin-left: 2px; margin-top: 1px;
+  }
+  .toast--lau:hover::after { opacity: 1; }
 
   /* ---------- Dải cảnh báo xung đột khi lưu ----------
      Ở lại cho tới khi người dùng bấm một trong hai nút — không đóng được bằng Esc,
@@ -1717,7 +1730,7 @@
   }
   // Trình duyệt CHẶN mọi liên kết file:// mở từ trang https — bấm không phản ứng gì,
   // không báo lỗi. Nên phải đi qua giao thức riêng bim://, đăng ký một lần trên máy
-  // bằng dang-ky-mo-file.reg. Xem docs/mo-file-tren-may.md.
+  // bằng dang-ky-mo-file.bat. Xem docs/mo-file-tren-may.md.
   function moTrongExplorer(nasPath, doiGoc) {
     // CSS đã ẩn nút với người chỉ xem, nhưng kiểm lại ở đây: ẩn bằng CSS chỉ là
     // giao diện, còn đây mới là chỗ tooltip và đường dẫn thư mục nội bộ đi ra.
@@ -1726,9 +1739,16 @@
     if (!goc) return;
     var duong = goc + "\\" + String(nasPath || "").replace(/^[\\/]+/, "").replace(/\//g, "\\");
     // Không cách nào hỏi trình duyệt xem giao thức đã đăng ký chưa. Bấm mà im lặng
-    // thì gần như chắc là máy chưa chạy file .reg — nói luôn, đừng để người dùng
-    // ngồi đoán xem mình bấm trượt hay phần mềm hỏng.
-    toast("Đang mở trong Explorer… Không thấy gì thì máy chưa đăng ký — chạy dang-ky-mo-file.reg một lần.");
+    // thì gần như chắc là máy chưa chạy dang-ky-mo-file.bat — nói luôn, đừng để
+    // người dùng ngồi đoán xem mình bấm trượt hay phần mềm hỏng.
+    //
+    // 30 giây, không phải 2,2 giây mặc định: câu này dài và là thứ người ta cần
+    // ĐỌC KỸ đúng lần đầu dùng — mà lần đầu cũng chính là lúc trình duyệt bật hộp
+    // thoại "Mở Windows PowerShell?" che mất màn hình. Toast ngắn tắt trước khi
+    // họ đóng hộp thoại xong. Bấm vào thông báo là tắt ngay.
+    toast("Đang mở trong Explorer… Trình duyệt hỏi “Mở Windows PowerShell?” thì chọn Mở. "
+      + "Không thấy gì cả thì máy này chưa đăng ký — bấm đúp dang-ky-mo-file.bat ở thư mục dự án, một lần là xong.",
+      30000);
     location.href = "bim://" + encodeURIComponent(duong);
   }
 
@@ -2798,12 +2818,22 @@
     checkAll.indeterminate = sel > 0 && sel < total;
   }
 
-  function toast(msg) {
+  // `ms` tuỳ chọn — bỏ trống là 2,2 giây như cũ, nên 70 chỗ gọi sẵn không đổi gì.
+  // Quá 5 giây thì toast chuyển sang dạng bấm-để-tắt: người dùng đọc xong đóng
+  // ngay được, không phải ngồi chờ nó tự biến mất.
+  var TOAST_MAC_DINH = 2200, TOAST_LAU_TU = 5000;
+  function toast(msg, ms) {
+    var lau = Number(ms) > 0 ? Number(ms) : TOAST_MAC_DINH;
     toastMsg.textContent = msg;
     toastEl.classList.add("show");
+    toastEl.classList.toggle("toast--lau", lau > TOAST_LAU_TU);
     clearTimeout(toast._t);
-    toast._t = setTimeout(function () { toastEl.classList.remove("show"); }, 2200);
+    toast._t = setTimeout(function () { toastEl.classList.remove("show"); }, lau);
   }
+  toastEl.addEventListener("click", function () {
+    clearTimeout(toast._t);
+    toastEl.classList.remove("show");
+  });
 
   // ================= Người làm combobox =================
   function openCombo(trig) {

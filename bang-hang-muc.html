@@ -1717,16 +1717,51 @@
   function nasGoc() {
     try { return localStorage.getItem(NAS_GOC_KEY) || ""; } catch (e) { return ""; }
   }
+  // Tên các thư mục cấp 1 của cây đồng bộ (tập bản vẽ), đọc từ chính nasPath trong
+  // bảng — không ghi cứng "04.WEB" hay tên tập nào.
+  function tapCap1CuaCay() {
+    var s = {};
+    (state.rows || []).forEach(function (r) {
+      FKEYS.forEach(function (k) {
+        (Array.isArray(r[k]) ? r[k] : []).forEach(function (f) {
+          var d = f && f.nasPath ? String(f.nasPath).split(/[\\/]/)[0] : "";
+          if (d) s[d.toLowerCase()] = true;
+        });
+      });
+    });
+    return s;
+  }
+  // Người dùng hay dán đường dẫn của thư mục ĐANG MỞ trong Explorer — thường là
+  // một thư mục con sâu trong cây — thay vì thư mục gốc. Kết quả là đường dẫn ghép
+  // đôi ("…\04.WEB\1 Tap\2 Nhom\…\1 Tap\1 Nhom\file.pdf") và Explorer báo không
+  // thấy. Nhận ra bằng dấu hiệu: một thành phần của gốc trùng tên thư mục cấp 1
+  // của cây → phần trước nó mới là gốc thật. Cắt tại đó.
+  function catGocThua(goc) {
+    var cap1 = tapCap1CuaCay();
+    var s = String(goc);
+    var phan = s.split(/[\\/]/);
+    // Không xét phần định danh nơi chứa: UNC "\\máy\share" tách ra ["", "", máy,
+    // share] nên tập sớm nhất chỉ có thể ở chỉ số 4; ổ đĩa "Z:" ở chỉ số 0 nên
+    // tập sớm nhất ở 1. Tên máy hay share trùng tên một tập thì không được cắt.
+    var tu = /^[\\/]{2}/.test(s) ? 4 : 1;
+    for (var i = tu; i < phan.length; i++) {
+      if (cap1[phan[i].toLowerCase()]) return phan.slice(0, i).join("\\");
+    }
+    return goc;
+  }
   function hoiNasGoc() {
     var v = prompt(
-      "Thư mục gốc của cây đồng bộ trên MÁY NÀY.\n" +
+      "Thư mục gốc của cây đồng bộ trên MÁY NÀY — thư mục chứa các tập bản vẽ.\n" +
       "Mở thư mục đó trong Explorer, chép đường dẫn ở thanh địa chỉ rồi dán vào đây.\n\n" +
-      "Ví dụ:  \\\\ten-nas\\du-an\\…\\04.WEB   hoặc   Z:\\…\\04.WEB",
+      "Ví dụ:  \\\\ten-nas\\du-an\\…\\04.WEB   hoặc   Z:\\…\\04.WEB\n" +
+      "(Lỡ dán đường dẫn của thư mục con bên trong cũng được — trang tự cắt về gốc.)",
       nasGoc());
     if (v === null) return "";
-    v = String(v).trim().replace(/["']/g, "").replace(/[\\/]+$/, "");
-    try { localStorage.setItem(NAS_GOC_KEY, v); } catch (e) {}
-    return v;
+    v = String(v).trim().replace(/["']/g, "").replace(/\//g, "\\").replace(/[\\]+$/, "");
+    var cat = catGocThua(v);
+    if (cat !== v) toast("Đã cắt về thư mục gốc: " + cat, 8000);
+    try { localStorage.setItem(NAS_GOC_KEY, cat); } catch (e) {}
+    return cat;
   }
   // Trình duyệt CHẶN mọi liên kết file:// mở từ trang https — bấm không phản ứng gì,
   // không báo lỗi. Nên phải đi qua giao thức riêng bim://, đăng ký một lần trên máy
@@ -1737,6 +1772,15 @@
     if (!canEdit()) return;
     var goc = doiGoc ? hoiNasGoc() : (nasGoc() || hoiNasGoc());
     if (!goc) return;
+    // Cắt CẢ gốc đã lưu, không chỉ gốc vừa khai: gốc sai nằm sẵn trong localStorage
+    // từ lần trước thì mọi lần bấm sau đều hỏng, mà người dùng không biết phải giữ
+    // Ctrl để khai lại. Sửa xong ghi đè để lần sau không phải cắt nữa.
+    var catRoi = catGocThua(goc);
+    if (catRoi !== goc) {
+      goc = catRoi;
+      try { localStorage.setItem(NAS_GOC_KEY, goc); } catch (e) {}
+      toast("Thư mục gốc đã lưu bị thừa đoạn cuối — đã tự cắt về: " + goc, 8000);
+    }
     var duong = goc + "\\" + String(nasPath || "").replace(/^[\\/]+/, "").replace(/\//g, "\\");
     // Không cách nào hỏi trình duyệt xem giao thức đã đăng ký chưa. Bấm mà im lặng
     // thì gần như chắc là máy chưa chạy dang-ky-mo-file.bat — nói luôn, đừng để
